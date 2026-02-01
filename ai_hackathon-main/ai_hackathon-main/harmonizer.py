@@ -10,8 +10,9 @@ load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key)
 
-# The specific Gemma model ID for API access
-MODEL_ID = "gemma-3-27b-it" 
+# The specific model ID for API access.
+# gemini-1.5-flash is the fastest and most reliable commercial model for this task.
+MODEL_ID = "gemini-1.5-flash" 
 
 # --- 2. THE HARMONIZATION LOGIC ---
 def get_aikosh_metadata(raw_data):

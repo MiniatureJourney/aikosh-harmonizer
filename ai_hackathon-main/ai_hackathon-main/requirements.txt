@@ -11,3 +11,4 @@ opencv-python
 python-multipart
 google-genai
 python-dotenv
+openpyxl

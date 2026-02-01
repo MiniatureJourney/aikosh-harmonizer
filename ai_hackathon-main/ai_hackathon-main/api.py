@@ -35,9 +35,14 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
+@app.head("/")
 async def root():
     # Serve the index.html
     return FileResponse('static/index.html')
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "message": "Service is healthy"}
 
 from starlette.concurrency import run_in_threadpool
 
