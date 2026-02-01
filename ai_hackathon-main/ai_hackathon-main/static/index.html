@@ -44,22 +44,15 @@
         }
 
         /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
 
-        ::-webkit-scrollbar-track {
-            background: #0f172a;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: #475569;
-        }
+        /* Smooth transitions */
+        #detailsView, #emptyState { transition: opacity 0.2s ease; }
+        .file-item { transition: background-color 0.15s ease, border-color 0.15s ease; }
+        .drop-zone-disabled { pointer-events: none; opacity: 0.7; }
     </style>
 </head>
 
@@ -143,20 +136,29 @@
 
             <!-- Empty State -->
             <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-                <div class="max-w-md w-full border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-2xl p-12 transition-all hover:border-orange-500/50 hover:bg-slate-900 group cursor-pointer"
-                    onclick="document.getElementById('fileInput').click()">
+                <div id="dropZoneBox" class="max-w-md w-full border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-2xl p-12 transition-all hover:border-orange-500/50 hover:bg-slate-900 group cursor-pointer"
+                    onclick="if(!isProcessing) document.getElementById('fileInput').click()">
                     <div
                         class="mx-auto w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                         <i data-lucide="upload-cloud"
                             class="w-10 h-10 text-slate-400 group-hover:text-orange-500 transition-colors"></i>
                     </div>
-                    <h3 class="text-xl font-semibold text-white mb-2">Upload Data Files</h3>
-                    <p class="text-slate-400 mb-6">Drag & drop PDF, CSV, or Excel files here<br>to start harmonization.
+                    <h3 class="text-xl font-semibold text-white mb-2">Upload files</h3>
+                    <p class="text-slate-400 mb-6">Drop PDF, CSV, or Excel here — we’ll extract metadata and standardize it.
                     </p>
                     <span id="maxSizeHint"
                         class="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
-                        <i data-lucide="info" class="w-3 h-3"></i> Max file size: <span id="maxSizeValue">25MB</span>
+                        <i data-lucide="info" class="w-3 h-3"></i> Max: <span id="maxSizeValue">25MB</span> per file
                     </span>
+                </div>
+            </div>
+
+            <!-- Processing overlay message (shown while polling) -->
+            <div id="processingOverlay" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-10">
+                <div class="flex flex-col items-center gap-4">
+                    <i data-lucide="loader-2" class="w-12 h-12 text-orange-500 animate-spin"></i>
+                    <p id="processingText" class="text-slate-300 font-medium">Processing...</p>
+                    <p id="processingSubtext" class="text-slate-500 text-sm">This may take a minute for PDFs.</p>
                 </div>
             </div>
 
@@ -295,11 +297,11 @@
 
         function showToast(message, type) {
             const toast = document.createElement('div');
-            toast.className = 'fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-[100] max-w-sm ' +
-                (type === 'error' ? 'bg-red-900/90 text-red-100 border border-red-700' : 'bg-slate-800 text-slate-200 border border-slate-600');
+            toast.className = 'fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-xl z-[100] max-w-sm animate-fade-in ' +
+                (type === 'error' ? 'bg-red-900/95 text-red-100 border border-red-600' : type === 'success' ? 'bg-emerald-900/95 text-emerald-100 border border-emerald-600' : 'bg-slate-800/95 text-slate-200 border border-slate-600');
             toast.textContent = message;
             document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transition = 'opacity 0.2s'; setTimeout(() => toast.remove(), 200); }, 3500);
         }
 
         // --- LOGIC ---
@@ -316,14 +318,32 @@
             processQueue();
         }
 
+        function setProcessingUI(on) {
+            isProcessing = on;
+            const drop = document.getElementById('dropZone');
+            const overlay = document.getElementById('processingOverlay');
+            if (drop) drop.classList.toggle('drop-zone-disabled', on);
+            if (overlay) overlay.classList.toggle('hidden', !on);
+            renderList();
+        }
+
+        function friendlyError(msg) {
+            if (msg.length > 120) return msg.slice(0, 117) + '...';
+            return msg;
+        }
+
         async function processQueue() {
             if (isProcessing) return;
             const next = filesQueue.find(f => f.status === 'pending');
-            if (!next) { updateAggregateStats(); return; }
+            if (!next) { updateAggregateStats(); setProcessingUI(false); return; }
 
-            isProcessing = true;
+            const isPdf = next.file.name.toLowerCase().endsWith('.pdf');
+            setProcessingUI(true);
             next.status = 'processing';
+            document.getElementById('processingText').textContent = isPdf ? 'Analyzing PDF...' : 'Processing spreadsheet...';
+            document.getElementById('processingSubtext').textContent = isPdf ? 'Extracting text and generating metadata.' : 'Almost done.';
             renderList();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
 
             try {
                 let endpoint = '/process-pdf';
@@ -335,36 +355,36 @@
                 const res = await fetch(endpoint, { method: 'POST', body: formData });
                 if (!res.ok) {
                     const errText = await res.text();
-                    let msg = "Server Error " + res.status;
+                    let msg = "Something went wrong.";
                     try {
                         const errJson = JSON.parse(errText);
                         const d = errJson.detail;
                         msg = (typeof d === 'string') ? d : (Array.isArray(d) && d[0]?.msg) ? d[0].msg : (d?.msg || msg);
-                    } catch (e) { if (res.status === 413) msg = "File too large. Max size: " + maxUploadMb + "MB."; }
-                    throw new Error(msg);
+                    } catch (e) { if (res.status === 413) msg = "File too large. Max " + maxUploadMb + "MB."; }
+                    throw new Error(friendlyError(msg));
                 }
 
                 let json = await res.json();
 
-                // POLLING LOGIC (with timeout)
                 if (json.status === 'processing') {
+                    document.getElementById('processingSubtext').textContent = 'Checking status...';
                     const fileHash = json.file_hash;
-                    const maxAttempts = 45; // 45 * 2s = 90s timeout
+                    const maxAttempts = 45;
                     let attempts = 0;
                     while (attempts < maxAttempts) {
                         await new Promise(r => setTimeout(r, 2000));
+                        document.getElementById('processingSubtext').textContent = 'Checking status... (' + ((attempts + 1) * 2) + 's)';
                         const statusRes = await fetch(`/status/${fileHash}`);
-                        if (!statusRes.ok) throw new Error("Polling failed");
+                        if (!statusRes.ok) throw new Error("Could not check status.");
                         json = await statusRes.json();
 
-                        if (json.status === 'error') throw new Error(json.error_message || "Unknown Error");
+                        if (json.status === 'error') throw new Error(friendlyError(json.error_message || "Processing failed."));
                         if (json.catalog_info || json.metadata?.catalog_info || json._is_cached) break;
                         attempts++;
                     }
-                    if (attempts >= maxAttempts) throw new Error("Processing timed out. Please try again.");
+                    if (attempts >= maxAttempts) throw new Error("Took too long. Try a smaller file or Retry.");
                 }
 
-                // Merge: file_hash/original_filename always; for PDF keep tables/lineage/confidence from top level
                 const payload = json.metadata || json;
                 next.data = {
                     ...payload,
@@ -376,15 +396,16 @@
                 };
                 next.status = 'success';
                 if (!selectedFileId) selectFile(next.id);
+                showToast(next.file.name + ' ready', 'success');
 
             } catch (err) {
                 console.error(err);
                 next.status = 'error';
                 next.errorMsg = err.message;
+                showToast(err.message, 'error');
             }
 
-            isProcessing = false;
-            renderList();
+            setProcessingUI(false);
             processQueue();
         }
 
@@ -392,37 +413,43 @@
             fileListEl.innerHTML = '';
             filesQueue.forEach(item => {
                 const el = document.createElement('div');
-                const active = selectedFileId === item.id ? 'bg-slate-800 border-orange-500/50' : 'bg-slate-900 border-transparent hover:bg-slate-800';
-                el.className = `p-3 rounded-lg border cursor-pointer group transition-all ${active}`;
+                el.className = 'file-item p-3 rounded-lg border cursor-pointer ' +
+                    (selectedFileId === item.id ? 'bg-slate-800 border-orange-500/50' : 'bg-slate-900 border-slate-800 hover:bg-slate-800/80');
                 el.onclick = () => selectFile(item.id);
 
                 let icon = '<i data-lucide="clock" class="w-4 h-4 text-slate-500"></i>';
+                let statusText = 'Waiting';
                 let statusColor = 'text-slate-500';
 
                 if (item.status === 'processing') {
                     icon = '<i data-lucide="loader-2" class="w-4 h-4 text-orange-500 animate-spin"></i>';
+                    statusText = 'Processing...';
                     statusColor = 'text-orange-500';
                 } else if (item.status === 'success') {
                     icon = '<i data-lucide="check-circle" class="w-4 h-4 text-green-500"></i>';
+                    statusText = 'Ready';
                     statusColor = 'text-green-500';
                 } else if (item.status === 'error') {
                     icon = '<i data-lucide="alert-circle" class="w-4 h-4 text-red-500"></i>';
+                    statusText = '';
                     statusColor = 'text-red-500';
                 }
 
+                const errDisplay = (item.errorMsg || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const errTitle = (item.errorMsg || '').replace(/"/g, '&quot;');
                 el.innerHTML = `
                     <div class="flex items-center gap-3 mb-1">
                         ${icon}
-                        <div class="font-medium text-sm text-slate-200 truncate flex-1">${item.file.name}</div>
+                        <div class="font-medium text-sm text-slate-200 truncate flex-1" title="${(item.file.name || '').replace(/"/g, '&quot;')}">${(item.file.name || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                     </div>
                     ${item.status === 'error'
-                        ? `<div class="flex items-center gap-2 pl-7"><span class="text-xs text-red-400 truncate flex-1">${item.errorMsg}</span><button onclick="retryFile('${item.id}')" class="flex-shrink-0 text-xs px-2 py-0.5 rounded bg-orange-600 hover:bg-orange-500 text-white">Retry</button></div>`
-                        : `<div class="text-xs ${statusColor} pl-7 capitalize">${item.status}</div>`
+                        ? `<div class="flex items-center gap-2 pl-7 mt-0.5"><span class="text-xs text-red-400 truncate flex-1" title="${errTitle}">${errDisplay}</span><button type="button" onclick="event.stopPropagation(); retryFile('${String(item.id).replace(/'/g, "\\'")}')" class="flex-shrink-0 text-xs px-2.5 py-1 rounded-md bg-orange-600 hover:bg-orange-500 text-white font-medium">Retry</button></div>`
+                        : `<div class="text-xs ${statusColor} pl-7">${statusText}</div>`
                     }
                 `;
                 fileListEl.appendChild(el);
             });
-            lucide.createIcons();
+            if (typeof lucide !== 'undefined') lucide.createIcons();
 
             const hasSuccess = filesQueue.some(f => f.status === 'success');
             downloadAllBtn.disabled = !hasSuccess;
@@ -438,9 +465,11 @@
             if (item.status === 'success' && item.data) {
                 emptyState.classList.add('hidden');
                 detailsView.classList.remove('hidden');
+                detailsView.style.opacity = '1';
                 renderDetails(item.data);
             } else if (item.status === 'error') {
-                // Keep showing whatever was shown, or switch to empty state if nothing previously selected
+                emptyState.classList.remove('hidden');
+                detailsView.classList.add('hidden');
             }
         }
 
@@ -557,13 +586,15 @@
         }
 
         function clearAllFiles() {
-            if (confirm("Clear workspace?")) {
+            if (filesQueue.length === 0) return;
+            if (confirm('Clear all files from the list?')) {
                 filesQueue = [];
                 selectedFileId = null;
                 renderList();
                 emptyState.classList.remove('hidden');
                 detailsView.classList.add('hidden');
                 updateAggregateStats();
+                showToast('Workspace cleared.', 'info');
             }
         }
 
@@ -574,11 +605,12 @@
 
         async function synthesizeBatch() {
             const successItems = filesQueue.filter(f => f.status === 'success');
-            if (successItems.length < 2) return alert("Select at least 2 processed files.");
+            if (successItems.length < 2) { showToast('Select at least 2 processed files to merge.', 'error'); return; }
 
             const btn = document.getElementById('synthesizeBtn');
             btn.disabled = true;
             btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Generating...';
+            if (typeof lucide !== 'undefined') lucide.createIcons();
 
             try {
                 const payload = successItems.map(f => f.data);
@@ -587,25 +619,26 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-                if (!res.ok) throw new Error("Synthesis failed");
+                if (!res.ok) throw new Error("Merge failed");
 
                 const mergedData = await res.json();
                 const id = "merged-" + Date.now();
                 filesQueue.unshift({
                     id,
-                    file: { name: "📊 Merged_Report.json" },
+                    file: { name: "Merged_Report.json" },
                     status: 'success',
                     data: mergedData,
                     errorMsg: null
                 });
                 renderList();
                 selectFile(id);
+                showToast('Report merged.', 'success');
             } catch (e) {
-                alert(e.message);
+                showToast(e.message || 'Merge failed.', 'error');
             } finally {
                 btn.disabled = false;
                 btn.innerHTML = '<i data-lucide="wand-2" class="w-4 h-4"></i> Synthesize Report';
-                lucide.createIcons();
+                if (typeof lucide !== 'undefined') lucide.createIcons();
             }
         }
     </script>
