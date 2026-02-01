@@ -99,7 +99,7 @@ async def handle_upload(file: UploadFile, task_type: str, background_tasks: Back
             # This runs in the same process but after response is sent (if we return) 
             # OR we can just await it for "Simple" mode users who don't want polling.
             # To support the "Polling" UI, we MUST return immediately.
-            background_tasks.add_task(process_file_task, None, file_hash, storage_filename, task_type)
+            background_tasks.add_task(process_file_task, file_hash, storage_filename, task_type)
 
         return {"status": "processing", "file_hash": file_hash, "message": "File uploaded, processing started."}
 
