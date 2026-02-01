@@ -50,6 +50,12 @@ from starlette.concurrency import run_in_threadpool
 async def harmonize_endpoint(file: UploadFile = File(...)):
     # 1. Read content for hashing
     content = await file.read()
+    
+    # [STABILITY FIX] Limit file size to 10MB to prevent Render Free Tier crash (502)
+    MAX_SIZE = 10 * 1024 * 1024
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Max limit is 10MB for this free server.")
+
     file_hash = get_file_hash(content)
 
     # 2. Check Cache
@@ -142,6 +148,12 @@ async def download_harmonized(file_hash: str):
 async def process_pdf_endpoint(file: UploadFile = File(...)):
     # 1. Read file content for hashing
     content = await file.read()
+    
+    # [STABILITY FIX] Limit file size to 10MB
+    MAX_SIZE = 10 * 1024 * 1024
+    if len(content) > MAX_SIZE:
+        raise HTTPException(status_code=413, detail="File too large. Max limit is 10MB.")
+
     file_hash = get_file_hash(content)
     
     # 2. Check Cache

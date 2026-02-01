@@ -20,7 +20,7 @@ def extract_file_info(file_path):
     ext = os.path.splitext(file_path)[1].lower()
     # Read content based on extension
     try:
-        ROW_LIMIT = 100 # Increased for better accuracy
+        ROW_LIMIT = 50 # Reduced to 50 to prevent timeouts on free server
         if ext == '.csv':
             # Try default utf-8, fallback to latin1 if needed
             try:

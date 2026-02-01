@@ -1,447 +1,213 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full bg-slate-900">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIKosh Harmonizer | Batch Processor</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <title>AIKosh Enterprise | Secure Data Harmonization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        :root {
-            --primary: #f97316;
-            --primary-dark: #ea580c;
-            --secondary: #138808;
-            --bg: #f8fafc;
-            --surface: #ffffff;
-            --text: #0f172a;
-            --text-light: #64748b;
-            --border: #e2e8f0;
-            --radius: 12px;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        body { font-family: 'Inter', sans-serif; }
+        .glass { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .success-glow { box-shadow: 0 0 15px rgba(34, 197, 94, 0.3); }
+        .processing-pulse { animation: pulse-ring 2s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite; }
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.5); }
+            70% { box-shadow: 0 0 0 10px rgba(249, 115, 22, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(249, 115, 22, 0); }
         }
-
-        body {
-            font-family: 'Outfit', sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        /* HEADER */
-        header {
-            background: var(--surface);
-            border-bottom: 1px solid var(--border);
-            padding: 0.8rem 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            z-index: 10;
-        }
-
-        .logo {
-            font-size: 1.4rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .logo span {
-            color: var(--primary);
-        }
-
-        .stats-bar {
-            display: flex;
-            gap: 2rem;
-            font-size: 0.9rem;
-            color: var(--text-light);
-        }
-
-        .stat-item b {
-            color: var(--text);
-        }
-
-        /* LAYOUT */
-        .app-layout {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        /* SIDEBAR */
-        .sidebar {
-            width: 320px;
-            background: var(--surface);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-        }
-
-        .sidebar-header {
-            padding: 1rem;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .upload-mini-btn {
-            background: var(--primary);
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            cursor: pointer;
-            font-weight: 500;
-        }
-
-        .file-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 0.5rem;
-        }
-
-        .file-item {
-            padding: 0.8rem;
-            border-radius: 8px;
-            margin-bottom: 0.5rem;
-            cursor: pointer;
-            transition: background 0.2s;
-            border: 1px solid transparent;
-            display: flex;
-            align-items: center;
-            gap: 0.8rem;
-        }
-
-        .file-item:hover {
-            background: #f1f5f9;
-        }
-
-        .file-item.active {
-            background: #fff7ed;
-            border-color: #ffedd5;
-        }
-
-        .file-icon {
-            font-size: 1.2rem;
-            color: var(--text-light);
-        }
-
-        .file-info {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .file-name {
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            font-size: 0.95rem;
-        }
-
-        .file-status {
-            font-size: 0.75rem;
-            color: var(--text-light);
-            margin-top: 0.2rem;
-        }
-
-        .status-badge {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-
-        .status-pending {
-            background: #cbd5e1;
-        }
-
-        .status-processing {
-            background: #eab308;
-            animation: pulse 1s infinite;
-        }
-
-        .status-success {
-            background: var(--secondary);
-        }
-
-        .status-error {
-            background: #ef4444;
-        }
-
-        @keyframes pulse {
-            0% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.5;
-            }
-
-            100% {
-                opacity: 1;
-            }
-        }
-
-        /* ACTIONS FOOTER IN SIDEBAR */
-        .sidebar-footer {
-            padding: 1rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .download-all-btn {
-            width: 100%;
-            background: var(--secondary);
-            color: white;
-            border: none;
-            padding: 0.8rem;
-            border-radius: 8px;
-            font-weight: 600;
-            cursor: pointer;
-            opacity: 0.5;
-            pointer-events: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-        }
-
-        .download-all-btn.enabled {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        /* MAIN CONTENT - EMPTY STATE */
-        .main-view {
-            flex: 1;
-            background: var(--bg);
-            padding: 2rem;
-            overflow-y: auto;
-            position: relative;
-        }
-
-        .empty-state {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100%;
-            color: var(--text-light);
-        }
-
-        .empty-upload-area {
-            border: 2px dashed var(--border);
-            border-radius: 16px;
-            padding: 3rem;
-            text-align: center;
-            background: rgba(255, 255, 255, 0.5);
-            transition: all 0.2s;
-        }
-
-        .empty-upload-area:hover {
-            border-color: var(--primary);
-            background: rgba(255, 255, 255, 0.8);
-        }
-
-        /* MAIN CONTENT - DETAILS */
-        .details-container {
-            display: none;
-            max-width: 900px;
-            margin: 0 auto;
-        }
-
-        .detail-header {
-            margin-bottom: 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-        }
-
-        .detail-card {
-            background: var(--surface);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            box-shadow: var(--shadow);
-            margin-bottom: 1.5rem;
-        }
-
-        .tag {
-            display: inline-block;
-            background: #f1f5f9;
-            padding: 0.25rem 0.6rem;
-            border-radius: 4px;
-            font-size: 0.8rem;
-            margin-right: 0.5rem;
-            color: #475569;
-        }
-
-        .tag.sector {
-            background: #fff7ed;
-            color: var(--primary);
-            border: 1px solid #ffedd5;
-        }
-
-        .kv-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-        }
-
-        .kv-item label {
-            display: block;
-            font-size: 0.8rem;
-            color: var(--text-light);
-            margin-bottom: 0.2rem;
-        }
-
-        .kv-item value {
-            font-weight: 500;
-            font-size: 1rem;
-        }
-
-        /* JSON Preview */
-        .json-preview {
-            background: #1e293b;
-            color: #e2e8f0;
-            padding: 1rem;
-            border-radius: 8px;
-            font-family: monospace;
-            font-size: 0.85rem;
-            white-space: pre-wrap;
-            max-height: 300px;
-            overflow-y: auto;
-        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
     </style>
 </head>
 
-<body>
+<body class="h-full text-slate-200 antialiased selection:bg-orange-500 selection:text-white overflow-hidden flex flex-col">
 
-    <header>
-        <div class="logo">
-            <span>AI</span>Kosh Batch Processor
+    <!-- Navbar -->
+    <nav class="border-b border-slate-800 bg-slate-900/95 backdrop-blur z-50">
+        <div class="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center gap-3">
+                    <div class="bg-gradient-to-br from-orange-500 to-red-600 p-2 rounded-lg shadow-lg">
+                        <i data-lucide="database" class="w-5 h-5 text-white"></i>
+                    </div>
+                    <div>
+                        <span class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+                            AIKosh<span class="font-light text-orange-500">Enterprise</span>
+                        </span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-6 text-sm">
+                    <div class="flex items-center gap-2 px-3 py-1 rounded-full bg-green-900/20 border border-green-800/50 text-green-400">
+                        <i data-lucide="shield-check" class="w-3 h-3"></i>
+                        <span>Secure Environment</span>
+                    </div>
+                    <div class="hidden md:flex gap-4 text-slate-400">
+                        <span class="flex items-center gap-1"><i data-lucide="file-check" class="w-4 h-4 text-orange-500"></i> Processed: <b id="statProcessed" class="text-white ml-1">0</b></span>
+                        <span class="flex items-center gap-1"><i data-lucide="zap" class="w-4 h-4 text-yellow-500"></i> Avg Score: <b id="statScore" class="text-white ml-1">--</b></span>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="stats-bar">
-            <div class="stat-item">Processed: <b id="statProcessed">0/0</b></div>
-            <div class="stat-item">Avg AI Score: <b id="statScore">0.0</b></div>
-        </div>
-    </header>
+    </nav>
 
-    <div class="app-layout">
-        <!-- SIDEBAR -->
-        <aside class="sidebar">
-            <div class="sidebar-header">
-                <span style="font-weight:600">Files</span>
-                <button class="upload-mini-btn" onclick="document.getElementById('fileInput').click()"
-                    style="margin-left:auto">+ Add</button>
-                <button class="upload-mini-btn" onclick="clearAllFiles()"
-                    style="background:#ef4444; margin-left:0.5rem">Clear</button>
+    <!-- Main Layout -->
+    <div class="flex flex-1 overflow-hidden relative">
+        <!-- Sidebar -->
+        <aside class="w-80 bg-slate-900 border-r border-slate-800 flex flex-col z-20 shadow-xl">
+            <div class="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+                <h2 class="font-semibold text-slate-300 flex items-center gap-2">
+                    <i data-lucide="folder-open" class="w-4 h-4"></i> Workspace
+                </h2>
+                <div class="flex gap-2">
+                     <button onclick="document.getElementById('fileInput').click()" 
+                        class="p-1.5 hover:bg-slate-800 rounded-md text-orange-500 transition-colors" title="Add Files">
+                        <i data-lucide="plus" class="w-5 h-5"></i>
+                    </button>
+                    <button onclick="clearAllFiles()" 
+                        class="p-1.5 hover:bg-slate-800 rounded-md text-red-400 transition-colors" title="Clear All">
+                        <i data-lucide="trash-2" class="w-5 h-5"></i>
+                    </button>
+                </div>
                 <input type="file" id="fileInput" accept=".pdf,.csv,.xlsx" multiple hidden>
             </div>
 
-            <div class="file-list" id="fileList">
-                <!-- File Items Injected Here -->
+            <!-- File List -->
+            <div id="fileList" class="flex-1 overflow-y-auto p-3 space-y-2">
+                <!-- Items injected here -->
             </div>
 
-            <div class="sidebar-footer">
-                <button class="download-all-btn" id="downloadAllBtn" onclick="downloadBatch()">
-                    <span>Download (ZIP)</span>
+            <!-- Sidebar Footer -->
+            <div class="p-4 border-t border-slate-800 bg-slate-900/50 space-y-3">
+                <button id="downloadAllBtn" onclick="downloadBatch()" disabled
+                    class="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i data-lucide="download" class="w-4 h-4"></i> Download All
                 </button>
-                <button class="download-all-btn" id="synthesizeBtn" onclick="synthesizeBatch()"
-                    style="margin-top:0.5rem; background:#7c3aed">
-                    <span>Synthesize All</span>
+                <button id="synthesizeBtn" onclick="synthesizeBatch()" disabled
+                    class="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white rounded-lg font-medium shadow-lg shadow-orange-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                    <i data-lucide="wand-2" class="w-4 h-4"></i> Synthesize Report
                 </button>
             </div>
         </aside>
 
-        <!-- MAIN VIEW -->
-        <main class="main-view" id="dropZone">
-
-            <div class="empty-state" id="emptyState">
-                <div class="empty-upload-area">
-                    <img src="https://cdn-icons-png.flaticon.com/512/337/337946.png" width="64"
-                        style="opacity:0.4; margin-bottom:1rem">
-                    <h2>Drag & Drop Files Here</h2>
-                    <p>Support PDF, CSV, Excel. Process multiple files at once.</p>
+        <!-- Main Content Area -->
+        <main id="dropZone" class="flex-1 relative bg-slate-950 overflow-y-auto">
+            
+            <!-- Empty State -->
+            <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
+                <div class="max-w-md w-full border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-2xl p-12 transition-all hover:border-orange-500/50 hover:bg-slate-900 group cursor-pointer" onclick="document.getElementById('fileInput').click()">
+                    <div class="mx-auto w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                        <i data-lucide="upload-cloud" class="w-10 h-10 text-slate-400 group-hover:text-orange-500 transition-colors"></i>
+                    </div>
+                    <h3 class="text-xl font-semibold text-white mb-2">Upload Data Files</h3>
+                    <p class="text-slate-400 mb-6">Drag & drop PDF, CSV, or Excel files here<br>to start harmonization.</p>
+                    <span class="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
+                        <i data-lucide="info" class="w-3 h-3"></i> Max file size: 10MB
+                    </span>
                 </div>
             </div>
 
-            <div class="details-container" id="detailsView">
-                <div class="detail-header">
+            <!-- Details View -->
+            <div id="detailsView" class="hidden container mx-auto max-w-5xl p-8">
+                <!-- Header -->
+                <div class="flex justify-between items-start mb-8">
                     <div>
-                        <h1 style="margin:0" id="detTitle">Document Title</h1>
-                        <p style="color:var(--text-light); margin:0.5rem 0 0" id="detDesc">Description...</p>
-                        <div style="margin-top:1rem" id="detTags"></div>
-                    </div>
-                    <div style="text-align:right">
-                        <div style="font-size:2.5rem; font-weight:700; color:var(--secondary)" id="detScore">0.9</div>
-                        <div style="font-size:0.8rem; color:var(--text-light)">AI Readiness</div>
-                    </div>
-                </div>
-
-                <div class="detail-card">
-                    <h3 style="margin-top:0; color:var(--text-light); font-size:0.9rem; text-transform:uppercase;">
-                        Provenance</h3>
-                    <div class="kv-grid">
-                        <div class="kv-item"><label>Source</label>
-                            <value id="detSource">--</value>
+                        <div class="flex items-center gap-3 mb-2">
+                             <h1 id="detTitle" class="text-3xl font-bold text-white tracking-tight">Document Title</h1>
+                             <span id="detFormat" class="px-2 py-0.5 rounded text-xs font-bold bg-slate-800 text-slate-400 border border-slate-700">PDF</span>
                         </div>
-                        <div class="kv-item"><label>Jurisdiction</label>
-                            <value id="detJurisdiction">--</value>
-                        </div>
-                        <div class="kv-item"><label>Data Owner</label>
-                            <value id="detOwner">--</value>
+                        <p id="detDesc" class="text-slate-400 max-w-2xl leading-relaxed">No description available.</p>
+                        <div id="detTags" class="flex flex-wrap gap-2 mt-4"></div>
+                    </div>
+                    <div class="text-right">
+                        <div class="inline-flex flex-col items-center justify-center w-24 h-24 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl relative overflow-hidden group">
+                           <div class="absolute inset-0 bg-gradient-to-br from-green-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div> 
+                           <span id="detScore" class="text-4xl font-bold text-green-500 relative z-10">0.9</span>
+                           <span class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mt-1 relative z-10">AI Ready</span>
                         </div>
                     </div>
                 </div>
 
-                <div class="detail-card">
-                    <h3 style="margin-top:0; color:var(--text-light); font-size:0.9rem; text-transform:uppercase;">
-                        Technical</h3>
-                    <div class="kv-grid">
-                        <div class="kv-item"><label>Format</label>
-                            <value id="detFormat">PDF</value>
+                <!-- Cards Grid -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                    <!-- Provenance Card -->
+                    <div class="glass rounded-xl p-6">
+                        <h3 class="text-xs font-bold text-orange-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <i data-lucide="map-pin" class="w-3 h-3"></i> Provenance data
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between border-b border-slate-800 pb-2 last:border-0 last:pb-0">
+                                <span class="text-slate-400 text-sm">Source</span>
+                                <span id="detSource" class="font-medium text-white">--</span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-800 pb-2 last:border-0 last:pb-0">
+                                <span class="text-slate-400 text-sm">Jurisdiction</span>
+                                <span id="detJurisdiction" class="font-medium text-white">--</span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-800 pb-2 last:border-0 last:pb-0">
+                                <span class="text-slate-400 text-sm">Data Owner</span>
+                                <span id="detOwner" class="font-medium text-white">--</span>
+                            </div>
                         </div>
-                        <div class="kv-item"><label>Machine Readable</label>
-                            <value id="detReadable">Yes</value>
-                        </div>
-                        <div class="kv-item"><label>Granularity</label>
-                            <value id="detGran">State</value>
+                    </div>
+
+                    <!-- Technical Card -->
+                    <div class="glass rounded-xl p-6">
+                        <h3 class="text-xs font-bold text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <i data-lucide="cpu" class="w-3 h-3"></i> Technical Specs
+                        </h3>
+                        <div class="space-y-4">
+                            <div class="flex justify-between border-b border-slate-800 pb-2 last:border-0 last:pb-0">
+                                <span class="text-slate-400 text-sm">Machine Readable</span>
+                                <span id="detReadable" class="font-medium text-white">Yes</span>
+                            </div>
+                            <div class="flex justify-between border-b border-slate-800 pb-2 last:border-0 last:pb-0">
+                                <span class="text-slate-400 text-sm">Granularity</span>
+                                <span id="detGran" class="font-medium text-white">State</span>
+                            </div>
+                             <div class="flex justify-between border-b border-slate-800 pb-2 last:border-0 last:pb-0">
+                                <span class="text-slate-400 text-sm">Original File</span>
+                                <span id="detOrigName" class="font-medium text-white text-xs truncate max-w-[150px]">--</span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <div class="detail-card">
-                    <h3
-                        style="margin-top:0; color:var(--text-light); font-size:0.9rem; text-transform:uppercase; display:flex; justify-content:space-between;">
-                        Original JSON
-                        <div>
-                            <button id="btnDownloadHarmonized" onclick="downloadHarmonized()"
-                                style="background:transparent; border:1px solid var(--secondary); color:var(--secondary); cursor:pointer; font-weight:600; padding:0.2rem 0.5rem; border-radius:4px; margin-right:0.5rem; display:none;">
-                                DOWNLOAD CSV
+                <!-- Code Block -->
+                <div class="glass rounded-xl overflow-hidden border border-slate-800">
+                    <div class="bg-slate-900/80 px-4 py-3 border-b border-slate-800 flex justify-between items-center">
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Metadata Output</span>
+                        <div class="flex gap-3">
+                            <button id="btnDownloadHarmonized" onclick="downloadHarmonized()" class="hidden text-xs font-semibold text-green-400 hover:text-green-300 transition-colors flex items-center gap-1">
+                                <i data-lucide="file-spreadsheet" class="w-3 h-3"></i> DOWNLOAD CSV
                             </button>
-                            <button onclick="copyJSON()"
-                                style="background:transparent; border:none; color:var(--primary); cursor:pointer; font-weight:600">COPY</button>
+                            <button onclick="copyJSON()" class="text-xs font-semibold text-orange-500 hover:text-orange-400 transition-colors flex items-center gap-1">
+                                <i data-lucide="copy" class="w-3 h-3"></i> COPY JSON
+                            </button>
                         </div>
-                    </h3>
-                    <div class="json-preview" id="detJson"></div>
+                    </div>
+                    <div class="bg-black/40 p-0">
+                        <pre id="detJson" class="text-xs font-mono text-emerald-400 p-4 max-h-96 overflow-y-auto"></pre>
+                    </div>
                 </div>
-            </div>
 
+            </div>
         </main>
     </div>
 
+    <!-- Scripts -->
     <script>
+        lucide.createIcons();
+
         // --- STATE ---
-        let filesQueue = []; // { id, file, status: 'pending'|'processing'|'success'|'error', data: null, errorMsg: '' }
+        let filesQueue = [];
         let selectedFileId = null;
         let isProcessing = false;
 
@@ -454,26 +220,18 @@
         const downloadAllBtn = document.getElementById('downloadAllBtn');
         const synthesizeBtn = document.getElementById('synthesizeBtn');
 
-        // --- INIT LISTENER ---
+        // --- LISTENERS ---
         fileInput.addEventListener('change', e => addFiles(e.target.files));
-
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); });
         });
         dropZone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
 
         // --- LOGIC ---
-
         function addFiles(fileList) {
             Array.from(fileList).forEach(file => {
                 const id = Math.random().toString(36).substr(2, 9);
-                filesQueue.push({
-                    id,
-                    file,
-                    status: 'pending',
-                    data: null,
-                    errorMsg: null
-                });
+                filesQueue.push({ id, file, status: 'pending', data: null, errorMsg: null });
             });
             renderList();
             processQueue();
@@ -481,33 +239,34 @@
 
         async function processQueue() {
             if (isProcessing) return;
-
             const next = filesQueue.find(f => f.status === 'pending');
-            if (!next) {
-                updateAggregateStats();
-                return;
-            }
+            if (!next) { updateAggregateStats(); return; }
 
             isProcessing = true;
             next.status = 'processing';
             renderList();
 
             try {
-                // Determine endpoint
                 let endpoint = '/process-pdf';
                 if (next.file.name.match(/\.(csv|xlsx)$/i)) endpoint = '/harmonize';
-
+                
                 const formData = new FormData();
                 formData.append('file', next.file);
 
                 const res = await fetch(endpoint, { method: 'POST', body: formData });
-                if (!res.ok) throw new Error("Server error: " + res.status);
+                if (!res.ok) {
+                    const errText = await res.text();
+                    try {
+                        const errJson = JSON.parse(errText);
+                        throw new Error(errJson.detail || "Server Error " + res.status);
+                    } catch(e) {
+                        throw new Error("Server Error " + res.status);
+                    }
+                }
 
                 const json = await res.json();
                 next.data = json.metadata || json;
                 next.status = 'success';
-
-                // Auto-select first successful file if none selected
                 if (!selectedFileId) selectFile(next.id);
 
             } catch (err) {
@@ -518,9 +277,6 @@
 
             isProcessing = false;
             renderList();
-            updateAggregateStats();
-
-            // Loop
             processQueue();
         }
 
@@ -528,62 +284,55 @@
             fileListEl.innerHTML = '';
             filesQueue.forEach(item => {
                 const el = document.createElement('div');
-                el.className = `file-item ${selectedFileId === item.id ? 'active' : ''}`;
+                const active = selectedFileId === item.id ? 'bg-slate-800 border-orange-500/50' : 'bg-slate-900 border-transparent hover:bg-slate-800';
+                el.className = `p-3 rounded-lg border cursor-pointer group transition-all ${active}`;
                 el.onclick = () => selectFile(item.id);
 
-                let statusClass = 'status-pending';
-                if (item.status === 'processing') statusClass = 'status-processing';
-                if (item.status === 'success') statusClass = 'status-success';
-                if (item.status === 'error') statusClass = 'status-error';
+                let icon = '<i data-lucide="clock" class="w-4 h-4 text-slate-500"></i>';
+                let statusColor = 'text-slate-500';
+                
+                if (item.status === 'processing') {
+                    icon = '<i data-lucide="loader-2" class="w-4 h-4 text-orange-500 animate-spin"></i>'; 
+                    statusColor = 'text-orange-500';
+                } else if (item.status === 'success') {
+                    icon = '<i data-lucide="check-circle" class="w-4 h-4 text-green-500"></i>';
+                    statusColor = 'text-green-500';
+                } else if (item.status === 'error') {
+                    icon = '<i data-lucide="alert-circle" class="w-4 h-4 text-red-500"></i>';
+                    statusColor = 'text-red-500';
+                }
 
                 el.innerHTML = `
-                    <div class="status-badge ${statusClass}"></div>
-                    <div class="file-info">
-                        <div class="file-name" title="${item.file.name}">${item.file.name}</div>
-                        <div class="file-status">${getStatusText(item)}</div>
+                    <div class="flex items-center gap-3 mb-1">
+                        ${icon}
+                        <div class="font-medium text-sm text-slate-200 truncate flex-1">${item.file.name}</div>
                     </div>
+                    ${item.status === 'error' 
+                        ? `<div class="text-xs text-red-400 pl-7 truncate">${item.errorMsg}</div>` 
+                        : `<div class="text-xs ${statusColor} pl-7 capitalize">${item.status}</div>`
+                    }
                 `;
                 fileListEl.appendChild(el);
             });
-
-            // Update footer button
+            lucide.createIcons();
+            
             const hasSuccess = filesQueue.some(f => f.status === 'success');
-            if (hasSuccess) {
-                downloadAllBtn.classList.add('enabled');
-                synthesizeBtn.classList.add('enabled');
-            } else {
-                downloadAllBtn.classList.remove('enabled');
-                synthesizeBtn.classList.remove('enabled');
-            }
-        }
-
-        function getStatusText(item) {
-            if (item.status === 'pending') return 'Queued';
-            if (item.status === 'processing') return 'Processing...';
-            if (item.status === 'success') return 'Ready';
-            if (item.status === 'error') return 'Failed';
-            return '';
+            downloadAllBtn.disabled = !hasSuccess;
+            synthesizeBtn.disabled = !hasSuccess;
         }
 
         function selectFile(id) {
             selectedFileId = id;
-            renderList(); // Update active class
-
+            renderList();
             const item = filesQueue.find(f => f.id === id);
             if (!item) return;
 
             if (item.status === 'success' && item.data) {
-                emptyState.style.display = 'none';
-                detailsView.style.display = 'block';
+                emptyState.classList.add('hidden');
+                detailsView.classList.remove('hidden');
                 renderDetails(item.data);
-            } else {
-                // Could show error view or loading view, for now just empty or keep previous
-                if (item.status === 'error') {
-                    // Show error in main view (simple implementation)
-                    emptyState.style.display = 'flex';
-                    emptyState.innerHTML = `<h3>Processing Failed</h3><p>${item.errorMsg}</p>`;
-                    detailsView.style.display = 'none';
-                }
+            } else if (item.status === 'error') {
+                // Keep showing whatever was shown, or switch to empty state if nothing previously selected
             }
         }
 
@@ -593,111 +342,92 @@
             const st = meta.spatial_temporal || {};
             const tech = meta.technical_metadata || {};
 
-            document.getElementById('detTitle').innerText = cat.title || "Untitled";
-            document.getElementById('detDesc').innerText = cat.description || "No description.";
+            document.getElementById('detTitle').innerText = cat.title || "Untitled Document";
+            document.getElementById('detDesc').innerText = cat.description || "No description provided.";
+            document.getElementById('detFormat').innerText = (tech.format || "FILE").toUpperCase();
+            document.getElementById('detOrigName').innerText = meta.original_filename || "unknown";
 
             const tagsEl = document.getElementById('detTags');
             tagsEl.innerHTML = '';
-            if (cat.sector) tagsEl.innerHTML += `<span class="tag sector">${cat.sector}</span>`;
-            if (cat.keywords) cat.keywords.forEach(k => tagsEl.innerHTML += `<span class="tag">${k}</span>`);
+            if (cat.sector) tagsEl.innerHTML += `<span class="px-2 py-1 rounded bg-orange-500/10 text-orange-400 text-xs font-semibold border border-orange-500/20">${cat.sector}</span>`;
+            if (cat.keywords) cat.keywords.forEach(k => tagsEl.innerHTML += `<span class="px-2 py-1 rounded bg-slate-800 text-slate-400 text-xs border border-slate-700">${k}</span>`);
 
             document.getElementById('detScore').innerText = tech.ai_readiness_level || 0.0;
             document.getElementById('detSource').innerText = prov.source || "--";
             document.getElementById('detJurisdiction').innerText = prov.jurisdiction || "--";
             document.getElementById('detOwner').innerText = prov.data_owner || "--";
-
-            document.getElementById('detFormat').innerText = tech.format || "PDF";
             document.getElementById('detReadable').innerText = tech.machine_readable ? "Yes" : "No";
             document.getElementById('detGran').innerText = st.granularity || "--";
-
             document.getElementById('detJson').innerText = JSON.stringify(meta, null, 2);
 
-            // Show Download CSV if we have a hash (meaning it's a CSV/Excel upload)
             const btn = document.getElementById('btnDownloadHarmonized');
             if (meta.file_hash) {
-                btn.style.display = 'inline-block';
+                btn.classList.remove('hidden');
                 btn.dataset.hash = meta.file_hash;
             } else {
-                btn.style.display = 'none';
+                btn.classList.add('hidden');
             }
-        }
-
-        function downloadHarmonized() {
-            const btn = document.getElementById('btnDownloadHarmonized');
-            const hash = btn.dataset.hash;
-            if (!hash) return;
-
-            window.open(`/download-harmonized/${hash}`, '_blank');
         }
 
         function updateAggregateStats() {
-            const total = filesQueue.length;
-            const processed = filesQueue.filter(f => f.status === 'success' || f.status === 'error').length;
             const successItems = filesQueue.filter(f => f.status === 'success');
-
-            document.getElementById('statProcessed').innerText = `${processed}/${total}`;
-
+            document.getElementById('statProcessed').innerText = successItems.length;
             if (successItems.length > 0) {
                 const sum = successItems.reduce((acc, curr) => acc + (curr.data.technical_metadata?.ai_readiness_level || 0), 0);
-                const avg = (sum / successItems.length).toFixed(2);
-                document.getElementById('statScore').innerText = avg;
+                document.getElementById('statScore').innerText = (sum / successItems.length).toFixed(2);
             }
+        }
+        
+        function downloadHarmonized() {
+            const btn = document.getElementById('btnDownloadHarmonized');
+            const hash = btn.dataset.hash;
+            if (hash) window.open(`/download-harmonized/${hash}`, '_blank');
         }
 
         async function downloadBatch() {
             const zip = new JSZip();
-            const successItems = filesQueue.filter(f => f.status === 'success');
-
-            successItems.forEach(item => {
+            filesQueue.filter(f => f.status === 'success').forEach(item => {
                 const name = item.file.name.replace(/\.[^/.]+$/, "") + ".json";
                 zip.file(name, JSON.stringify(item.data, null, 2));
             });
-
             const content = await zip.generateAsync({ type: "blob" });
-            saveAs(content, "aikosh_batch_metadata.zip");
+            saveAs(content, "aikosh_data_package.zip");
         }
 
         function clearAllFiles() {
-            if (!confirm("Are you sure you want to clear the list?")) return;
-            filesQueue = [];
-            selectedFileId = null;
-            renderList();
-            emptyState.style.display = 'flex';
-            detailsView.style.display = 'none';
-            updateAggregateStats();
+            if(confirm("Clear workspace?")) {
+                filesQueue = [];
+                selectedFileId = null;
+                renderList();
+                emptyState.classList.remove('hidden');
+                detailsView.classList.add('hidden');
+                updateAggregateStats();
+            }
         }
 
         function copyJSON() {
-            const text = document.getElementById('detJson').innerText;
-            navigator.clipboard.writeText(text).then(() => {
-                alert("JSON copied to clipboard!");
-            });
+            navigator.clipboard.writeText(document.getElementById('detJson').innerText);
+            alert("Copied to clipboard");
         }
-
-
+        
         async function synthesizeBatch() {
-            const successItems = filesQueue.filter(f => f.status === 'success');
-            if (successItems.length < 2) {
-                alert("Please process at least 2 files to synthesize.");
-                return;
-            }
-
-            const originalText = synthesizeBtn.innerText;
-            synthesizeBtn.innerText = "Merging...";
-            synthesizeBtn.classList.remove('enabled');
-
-            try {
+             const successItems = filesQueue.filter(f => f.status === 'success');
+             if (successItems.length < 2) return alert("Select at least 2 processed files.");
+             
+             const btn = document.getElementById('synthesizeBtn');
+             btn.disabled = true;
+             btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Generating...';
+             
+             try {
                 const payload = successItems.map(f => f.data);
                 const res = await fetch('/synthesize', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
                 if (!res.ok) throw new Error("Synthesis failed");
+                
                 const mergedData = await res.json();
-
-                // Add a "Merged Result" item to the list
                 const id = "merged-" + Date.now();
                 filesQueue.unshift({
                     id,
@@ -708,16 +438,14 @@
                 });
                 renderList();
                 selectFile(id);
-
-            } catch (err) {
-                alert("Error: " + err.message);
-            } finally {
-                synthesizeBtn.innerText = originalText;
-                synthesizeBtn.classList.add('enabled');
-            }
+             } catch(e) {
+                 alert(e.message);
+             } finally {
+                 btn.disabled = false;
+                 btn.innerHTML = '<i data-lucide="wand-2" class="w-4 h-4"></i> Synthesize Report';
+                 lucide.createIcons();
+             }
         }
-
     </script>
 </body>
-
 </html>
