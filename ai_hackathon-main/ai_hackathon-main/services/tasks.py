@@ -52,7 +52,8 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
         elif task_type == "pdf":
             # PDF Orchestrator
             result = process_pdf(temp_path)
-            result_metadata = result.get("metadata", {})
+            # Save FULL result (tables, lineage, etc)
+            result_metadata = result
 
         # Add tracking info
         result_metadata["file_hash"] = file_hash

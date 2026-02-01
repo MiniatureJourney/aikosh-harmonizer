@@ -433,6 +433,51 @@
             document.getElementById('detGran').innerText = st.granularity || "--";
             document.getElementById('detJson').innerText = JSON.stringify(meta, null, 2);
 
+            // --- RICH VISUALIZATIONS ---
+
+            // 1. Confidence Bar (If available)
+            if (meta.confidence) {
+                const conf = meta.confidence.overall_score || 0;
+                const confColor = conf > 0.8 ? 'text-green-500' : (conf > 0.5 ? 'text-yellow-500' : 'text-red-500');
+                document.getElementById('detScore').innerText = conf.toFixed(2);
+                document.getElementById('detScore').className = `text-4xl font-bold ${confColor} relative z-10`;
+            }
+
+            // 2. Lineage Info (If available)
+            if (meta.lineage) {
+                document.getElementById('detSource').innerHTML = `
+                    <div class="flex flex-col">
+                        <span>${prov.source || "--"}</span>
+                        <span class="text-xs text-slate-500">Method: ${meta.lineage.extraction_method || "Unknown"}</span>
+                    </div>`;
+            }
+
+            // 3. Tables Rendering
+            const codeBlock = document.getElementById('detJson').parentElement;
+            // Reset to just JSON first
+            codeBlock.innerHTML = `<pre id="detJson" class="text-xs font-mono text-emerald-400 p-4 max-h-96 overflow-y-auto">${JSON.stringify(meta, null, 2)}</pre>`;
+
+            if (meta.tables && meta.tables.length > 0) {
+                const tableContainer = document.createElement('div');
+                tableContainer.className = "border-t border-slate-800 p-4 bg-slate-900/50";
+                tableContainer.innerHTML = `<h4 class="text-xs font-bold text-blue-400 uppercase mb-3">Extracted Tables (${meta.tables.length})</h4>`;
+
+                meta.tables.forEach((tbl, idx) => {
+                    let html = `<div class="mb-4 last:mb-0 overflow-x-auto"><table class="w-full text-xs text-left text-slate-300 border-collapse">`;
+                    // Heuristic: array of arrays or dict
+                    if (Array.isArray(tbl.data)) {
+                        tbl.data.forEach((row, rIdx) => {
+                            html += `<tr class="${rIdx === 0 ? 'bg-slate-800 font-semibold text-white' : 'border-b border-slate-800 hover:bg-slate-800/50'}">`;
+                            row.forEach(cell => html += `<td class="p-2 border border-slate-700">${cell || ''}</td>`);
+                            html += `</tr>`;
+                        });
+                    }
+                    html += `</table></div>`;
+                    tableContainer.innerHTML += html;
+                });
+                codeBlock.appendChild(tableContainer);
+            }
+
             const btn = document.getElementById('btnDownloadHarmonized');
             if (meta.file_hash) {
                 btn.classList.remove('hidden');

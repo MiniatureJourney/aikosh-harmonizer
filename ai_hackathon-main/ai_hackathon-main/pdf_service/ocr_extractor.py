@@ -14,6 +14,9 @@ def get_reader():
         _reader = easyocr.Reader(['en'], gpu=False)
     return _reader
 
+def ocr_pdf(pdf_path: str):
+    pages = []
+    
     try:
         reader = None # Delay loading reader until absolutely necessary
         doc = fitz.open(pdf_path)
