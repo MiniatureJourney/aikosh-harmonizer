@@ -2,12 +2,12 @@ fastapi
 uvicorn
 pdfplumber
 pymupdf
-camelot-py[cv]
+camelot-py
 pandas
 pillow
 pdf2image
 easyocr
-opencv-python
+opencv-python-headless
 python-multipart
 google-genai
 python-dotenv

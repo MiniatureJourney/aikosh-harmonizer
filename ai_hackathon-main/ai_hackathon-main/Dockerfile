@@ -25,6 +25,10 @@ WORKDIR /app
 # Copy the requirements file first to leverage Docker cache
 COPY requirements.txt .
 
+# Install CPU-only PyTorch first to prevent downloading the huge GPU version
+# This significantly reduces image size and build memory usage
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
 # Install Python dependencies
 # --no-cache-dir reduces image size
 RUN pip install --no-cache-dir -r requirements.txt
