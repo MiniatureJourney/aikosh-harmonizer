@@ -2,6 +2,11 @@ import easyocr
 import fitz # PyMuPDF
 import numpy as np
 from PIL import Image
+import os
+import gc
+
+# Low Memory Mode for Render (disables OCR to stay < 512MB)
+LOW_MEMORY_MODE = os.getenv("LOW_MEMORY_MODE", "false").lower() == "true"
 
 # Global variable for lazy loading
 _reader = None
@@ -38,10 +43,17 @@ def ocr_pdf(pdf_path: str):
             print(f"[Page {i+1}] No text found. Running OCR...")
             
             if reader is None:
+                if LOW_MEMORY_MODE:
+                    print(f"[Page {i+1}] LOW_MEMORY_MODE active. Skipping OCR.")
+                    pages.append({
+                        "page": i + 1,
+                        "text": "[OCR Skipped due to Low Memory Mode]"
+                    })
+                    continue
                 reader = get_reader() # Load model only if needed
 
-            # Optimization: 200 DPI is usually sufficient for text
-            pix = page.get_pixmap(dpi=200) 
+            # Optimization: 150 DPI is sufficient for most LLM tasks and saves RAM
+            pix = page.get_pixmap(dpi=150) 
             img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
             img_np = np.array(img)
             
@@ -60,4 +72,10 @@ def ocr_pdf(pdf_path: str):
     except Exception as e:
         print(f"Error in OCR extraction: {e}")
         return []
+    finally:
+        # Cleanup reader if not needed anymore to free RAM
+        if LOW_MEMORY_MODE and '_reader' in globals() and _reader is not None:
+             global _reader
+             _reader = None
+             gc.collect()
 

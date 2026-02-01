@@ -111,8 +111,8 @@ def generate_metadata(pages_data):
     """
     full_text = " ".join([p.get("text", "") for p in pages_data])
     
-    if len(full_text) > 800000:
-        full_text = full_text[:800000] + "...(truncated)"
+    if len(full_text) > 100000:
+        full_text = full_text[:100000] + "...(truncated)"
 
     if not client:
         return {"error": "GEMINI_API_KEY not found in .env"}
