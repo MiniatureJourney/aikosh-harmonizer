@@ -182,14 +182,26 @@ def generate_metadata(pages_data):
             if not response:
                 continue
 
-            raw_text = response.text.strip()
-            
+            raw_text = getattr(response, "text", None) if response else None
+            if not raw_text or not isinstance(raw_text, str):
+                # Blocked content or empty response
+                last_error = ValueError("LLM returned no text (blocked or empty)")
+                continue
+            raw_text = raw_text.strip()
+            if not raw_text:
+                last_error = ValueError("LLM returned empty text")
+                continue
+
             if "```json" in raw_text:
                 raw_text = raw_text.split("```json")[1].split("```")[0]
             elif "```" in raw_text:
                 raw_text = raw_text.split("```")[1].split("```")[0]
-                
-            return json.loads(raw_text.strip())
+            raw_text = raw_text.strip()
+            if not raw_text:
+                last_error = ValueError("No JSON block in response")
+                continue
+
+            return json.loads(raw_text)
 
         except Exception as e:
             print(f"Failed with {model_id}: {e}")

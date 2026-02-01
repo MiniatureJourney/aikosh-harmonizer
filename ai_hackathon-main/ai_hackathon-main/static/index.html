@@ -81,11 +81,16 @@
                         </span>
                     </div>
                 </div>
-                <div class="flex items-center gap-6 text-sm">
+                <div class="flex items-center gap-4 text-sm">
+                    <div id="authSection" class="hidden items-center gap-2" style="display: none;">
+                        <span id="authUser" class="text-slate-400 truncate max-w-[120px]"></span>
+                        <button id="btnLogout" onclick="logout()" class="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs">Logout</button>
+                    </div>
+                    <button id="btnLogin" class="hidden px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white text-sm font-medium transition-colors">Login</button>
                     <div
                         class="flex items-center gap-2 px-3 py-1 rounded-full bg-green-900/20 border border-green-800/50 text-green-400">
                         <i data-lucide="shield-check" class="w-3 h-3"></i>
-                        <span>Secure Environment</span>
+                        <span>Secure</span>
                     </div>
                     <div class="hidden md:flex gap-4 text-slate-400">
                         <span class="flex items-center gap-1"><i data-lucide="file-check"
@@ -259,6 +264,35 @@
         </main>
     </div>
 
+    <!-- Auth Modal -->
+    <div id="authModal" class="hidden fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+                <h3 class="text-lg font-semibold text-white">Sign in</h3>
+                <button onclick="closeAuthModal()" class="p-1 rounded hover:bg-slate-800 text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div id="authError" class="hidden text-sm text-red-400 bg-red-900/30 border border-red-800 rounded-lg px-3 py-2"></div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Email</label>
+                    <input type="email" id="authEmail" placeholder="you@example.com" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Password</label>
+                    <input type="password" id="authPassword" placeholder="••••••••" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                </div>
+                <div id="authNameGroup" class="hidden">
+                    <label class="block text-xs font-medium text-slate-400 mb-1">Name (optional)</label>
+                    <input type="text" id="authName" placeholder="Your name" class="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent">
+                </div>
+                <div class="flex gap-2">
+                    <button id="authSubmitLogin" onclick="submitLogin()" class="flex-1 py-2.5 px-4 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-medium">Login</button>
+                    <button id="authSubmitRegister" onclick="submitRegister()" class="flex-1 py-2.5 px-4 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-medium">Register</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Scripts -->
     <script>
         lucide.createIcons();
@@ -278,9 +312,79 @@
         const downloadAllBtn = document.getElementById('downloadAllBtn');
         const synthesizeBtn = document.getElementById('synthesizeBtn');
 
-        // --- INIT: fetch max upload from server (Render / env)
+        // --- AUTH ---
+        let authToken = localStorage.getItem('aikosh_token');
+        let authEnabled = false;
+
+        function getAuthHeaders() {
+            const h = {};
+            if (authToken) h['Authorization'] = 'Bearer ' + authToken;
+            return h;
+        }
+
+        function openAuthModal() { document.getElementById('authModal').classList.remove('hidden'); document.getElementById('authError').classList.add('hidden'); if (typeof lucide !== 'undefined') lucide.createIcons(); }
+        function closeAuthModal() { document.getElementById('authModal').classList.add('hidden'); if (typeof lucide !== 'undefined') lucide.createIcons(); }
+        function showAuthError(msg) { const el = document.getElementById('authError'); el.textContent = msg; el.classList.remove('hidden'); }
+
+        async function submitLogin() {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            if (!email || !password) { showAuthError('Email and password required'); return; }
+            try {
+                const res = await fetch('/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+                if (!res.ok) { const d = await res.json().catch(() => ({})); showAuthError(d.detail || 'Login failed'); return; }
+                const data = await res.json();
+                authToken = data.access_token;
+                localStorage.setItem('aikosh_token', authToken);
+                closeAuthModal();
+                updateAuthUI(true, data.user);
+                showToast('Signed in', 'info');
+            } catch (e) { showAuthError('Network error'); }
+        }
+
+        async function submitRegister() {
+            const email = document.getElementById('authEmail').value.trim();
+            const password = document.getElementById('authPassword').value;
+            const name = document.getElementById('authName').value.trim() || null;
+            if (!email || !password) { showAuthError('Email and password required'); return; }
+            try {
+                const res = await fetch('/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, name }) });
+                if (!res.ok) { const d = await res.json().catch(() => ({})); showAuthError(d.detail || 'Registration failed'); return; }
+                const data = await res.json();
+                authToken = data.access_token;
+                localStorage.setItem('aikosh_token', authToken);
+                closeAuthModal();
+                updateAuthUI(true, data.user);
+                showToast('Account created', 'info');
+            } catch (e) { showAuthError('Network error'); }
+        }
+
+        function logout() {
+            authToken = null;
+            localStorage.removeItem('aikosh_token');
+            updateAuthUI(false);
+            showToast('Signed out', 'info');
+        }
+
+        function updateAuthUI(loggedIn, user) {
+            const btnLogin = document.getElementById('btnLogin');
+            const authSection = document.getElementById('authSection');
+            const authUser = document.getElementById('authUser');
+            if (authEnabled) {
+                if (loggedIn && user) { btnLogin.style.display = 'none'; authSection.style.display = 'flex'; authSection.classList.add('flex'); authUser.textContent = user.email; }
+                else { btnLogin.style.display = 'block'; authSection.style.display = 'none'; }
+            } else { btnLogin.style.display = 'none'; authSection.style.display = 'none'; }
+        }
+
+        // --- INIT: fetch health (max upload, auth_enabled) and auth/me
         fetch('/health').then(r => r.json()).then(d => {
-            if (d.max_upload_mb) { maxUploadMb = d.max_upload_mb; document.getElementById('maxSizeValue').textContent = maxUploadMb + 'MB'; }
+            if (d.max_upload_mb) { maxUploadMb = d.max_upload_mb; const el = document.getElementById('maxSizeValue'); if (el) el.textContent = maxUploadMb + 'MB'; }
+            authEnabled = !!d.auth_enabled;
+            if (authEnabled) {
+                document.getElementById('btnLogin').style.display = 'block';
+                document.getElementById('btnLogin').onclick = openAuthModal;
+                if (authToken) fetch('/auth/me', { headers: getAuthHeaders() }).then(r => r.json()).then(d => { if (d.user) updateAuthUI(true, d.user); else updateAuthUI(false); }).catch(() => updateAuthUI(false));
+            }
         }).catch(() => {});
 
         // --- LISTENERS ---
@@ -332,7 +436,8 @@
                 const formData = new FormData();
                 formData.append('file', next.file);
 
-                const res = await fetch(endpoint, { method: 'POST', body: formData });
+                const res = await fetch(endpoint, { method: 'POST', body: formData, headers: getAuthHeaders() });
+                if (res.status === 401) { authToken = null; localStorage.removeItem('aikosh_token'); updateAuthUI(false); showToast('Please sign in', 'error'); openAuthModal(); throw new Error('Please sign in'); }
                 if (!res.ok) {
                     const errText = await res.text();
                     let msg = "Server Error " + res.status;
@@ -353,7 +458,7 @@
                     let attempts = 0;
                     while (attempts < maxAttempts) {
                         await new Promise(r => setTimeout(r, 2000));
-                        const statusRes = await fetch(`/status/${fileHash}`);
+                        const statusRes = await fetch(`/status/${fileHash}`, { headers: getAuthHeaders() });
                         if (!statusRes.ok) throw new Error("Polling failed");
                         json = await statusRes.json();
 
@@ -416,7 +521,7 @@
                         <div class="font-medium text-sm text-slate-200 truncate flex-1">${item.file.name}</div>
                     </div>
                     ${item.status === 'error'
-                        ? `<div class="text-xs text-red-400 pl-7 truncate">${item.errorMsg}</div>`
+                        ? `<div class="flex items-center gap-2 pl-7"><span class="text-xs text-red-400 truncate flex-1">${item.errorMsg}</span><button onclick="retryFile('${item.id}')" class="flex-shrink-0 text-xs px-2 py-0.5 rounded bg-orange-600 hover:bg-orange-500 text-white">Retry</button></div>`
                         : `<div class="text-xs ${statusColor} pl-7 capitalize">${item.status}</div>`
                     }
                 `;
@@ -534,7 +639,11 @@
         function downloadHarmonized() {
             const btn = document.getElementById('btnDownloadHarmonized');
             const hash = btn.dataset.hash;
-            if (hash) window.open(`/download-harmonized/${hash}`, '_blank');
+            if (hash) {
+                const url = `/download-harmonized/${hash}`;
+                if (authToken) { const w = window.open('', '_blank'); fetch(url, { headers: getAuthHeaders() }).then(r => r.blob()).then(blob => { w.location.href = URL.createObjectURL(blob); }); }
+                else window.open(url, '_blank');
+            }
         }
 
         async function downloadBatch() {
@@ -545,6 +654,15 @@
             });
             const content = await zip.generateAsync({ type: "blob" });
             saveAs(content, "aikosh_data_package.zip");
+        }
+
+        function retryFile(id) {
+            const item = filesQueue.find(f => f.id === id);
+            if (!item || item.status !== 'error') return;
+            item.status = 'pending';
+            item.errorMsg = null;
+            renderList();
+            processQueue();
         }
 
         function clearAllFiles() {
@@ -575,7 +693,7 @@
                 const payload = successItems.map(f => f.data);
                 const res = await fetch('/synthesize', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
                     body: JSON.stringify(payload)
                 });
                 if (!res.ok) throw new Error("Synthesis failed");

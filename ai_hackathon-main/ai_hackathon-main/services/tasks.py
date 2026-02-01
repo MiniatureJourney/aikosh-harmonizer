@@ -73,18 +73,27 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
         result_metadata["_worker_processed"] = True
 
         # CRITICAL: explicit status update for frontend polling
-        # For PDF, error is inside result_metadata["metadata"]
+        # For PDF, error can be in result_metadata["metadata"], top-level, or _errors from orchestrator
         print(f"[Worker] Step 5: Checking for errors in result")
         idmo = _idmo_blob(result_metadata)
+        pdf_errors = result_metadata.pop("_errors", None)  # list of per-stage errors
         has_error = (
-            "error" in result_metadata or result_metadata.get("title") == "Processing Error"
-            or "error" in idmo or idmo.get("title") == "Processing Error"
+            pdf_errors
+            or "error" in result_metadata
+            or result_metadata.get("title") == "Processing Error"
+            or "error" in idmo
+            or idmo.get("title") == "Processing Error"
         )
         if has_error:
             result_metadata["status"] = "error"
             result_metadata["error_message"] = (
-                result_metadata.get("error") or result_metadata.get("summary")
-                or idmo.get("error") or idmo.get("summary") or "Processing failed"
+                "; ".join(pdf_errors)
+                if pdf_errors
+                else result_metadata.get("error")
+                or result_metadata.get("summary")
+                or idmo.get("error")
+                or idmo.get("summary")
+                or "Processing failed"
             )
             print(f"[Worker] Failure Detected: {result_metadata['error_message']}")
         else:
