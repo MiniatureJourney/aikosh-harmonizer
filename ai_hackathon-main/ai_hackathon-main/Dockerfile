@@ -13,7 +13,8 @@ ENV PYTHONUNBUFFERED=1
 # - ghostscript: Required for Camelot (Table extraction)
 # - git: Useful for installing git-based requirements if any
 RUN apt-get update && apt-get install -y \
-    libgl1-mesa-glx \
+    libgl1 \
+    libglx-mesa0 \
     libglib2.0-0 \
     ghostscript \
     && rm -rf /var/lib/apt/lists/*
