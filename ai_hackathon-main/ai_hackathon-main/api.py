@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-import shutil
 import os
+import tempfile
 import json
 from services.storage import get_storage_service
 from services.database import get_db_service
@@ -116,57 +116,72 @@ async def get_status(file_hash: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return data
 
+def _idmo_from_metadata(metadata: dict) -> dict:
+    """Get IDMO blob: for harmonize it's top-level; for PDF it's under 'metadata'."""
+    return metadata.get("metadata") or metadata
+
+
 @app.get("/download-harmonized/{file_hash}")
 async def download_harmonized(file_hash: str):
-    # Retrieve metadata to generate CSV
     metadata = db.get_metadata(file_hash)
     if not metadata or metadata.get("status") == "processing":
-         raise HTTPException(status_code=404, detail="File not ready or not found")
+        raise HTTPException(status_code=404, detail="File not ready or not found")
+
+    ext = os.path.splitext(metadata.get("original_filename", "data.csv"))[1] or ".csv"
+    storage_filename = f"{file_hash}{ext}"
 
     try:
-        # We need the original file to create CSV. 
-        # Download it to temp
-        ext = os.path.splitext(metadata.get("original_filename", "data.csv"))[1]
-        storage_filename = f"{file_hash}{ext}"
-        
-        try:
-            content = storage.get(storage_filename)
-        except Exception:
-             raise HTTPException(status_code=404, detail="Source file not found in storage")
-            
-        temp_input = f"temp_dl_{file_hash}{ext}"
-        with open(temp_input, "wb") as f:
-            f.write(content)
+        content = storage.get(storage_filename)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Source file not found in storage")
 
-        # Generate CSV (Logic borrowed from original api.py)
+    # Safe temp file per request (no collision with concurrent requests)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=ext, prefix="aikosh_dl_")
+    temp_input = tmp.name
+    try:
+        tmp.write(content)
+        tmp.close()
+    except Exception:
+        if os.path.exists(temp_input):
+            os.remove(temp_input)
+        raise HTTPException(status_code=500, detail="Failed to write temp file")
+
+    temp_used_as_response = False
+    try:
         import pandas as pd
+        idmo = _idmo_from_metadata(metadata)
+        tech = idmo.get("technical_metadata", {})
+        cat = idmo.get("catalog_info", {})
+
+        if ext not in ('.csv', '.xlsx', '.xls'):
+            temp_used_as_response = True
+            orig_name = metadata.get("original_filename") or ("download" + ext)
+            return FileResponse(temp_input, filename=orig_name)
+
         if ext == '.csv':
             df = pd.read_csv(temp_input)
-        elif ext in ['.xlsx', '.xls']:
-            df = pd.read_excel(temp_input)
         else:
-            return FileResponse(temp_input) 
+            df = pd.read_excel(temp_input)
 
-        # Map Headers
-        schema = metadata.get("technical_metadata", {}).get("schema_details", [])
+        schema = tech.get("schema_details", [])
         rename_map = {item["column"]: item["standardized_header"] for item in schema if "column" in item}
         if rename_map:
             df.rename(columns=rename_map, inplace=True)
 
-        output_filename = f"harmonized_{metadata.get('catalog_info', {}).get('title', 'data')}.csv"
-        # Sanitize
-        output_filename = "".join([c for c in output_filename if c.isalpha() or c.isdigit() or c in (' ', '.', '_')]).strip()
+        output_filename = f"harmonized_{cat.get('title', 'data')}.csv"
+        output_filename = "".join([c for c in output_filename if c.isalpha() or c.isdigit() or c in (' ', '.', '_')]).strip() or "harmonized_data.csv"
         output_path = os.path.join(OUTPUT_DIR, output_filename)
         df.to_csv(output_path, index=False)
-        
-        # Clean temp
-        if os.path.exists(temp_input):
-            os.remove(temp_input)
 
         return FileResponse(output_path, filename=output_filename)
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        if not temp_used_as_response and os.path.exists(temp_input):
+            try:
+                os.remove(temp_input)
+            except OSError:
+                pass
 
 @app.post("/synthesize")
 async def synthesize_endpoint(metadata_list: List[Dict[Any, Any]]):

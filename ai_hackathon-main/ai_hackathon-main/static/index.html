@@ -321,24 +321,34 @@
 
                 let json = await res.json();
 
-                // POLLING LOGIC
+                // POLLING LOGIC (with timeout)
                 if (json.status === 'processing') {
                     const fileHash = json.file_hash;
-                    // Poll every 2 seconds
-                    while (true) {
+                    const maxAttempts = 45; // 45 * 2s = 90s timeout
+                    let attempts = 0;
+                    while (attempts < maxAttempts) {
                         await new Promise(r => setTimeout(r, 2000));
                         const statusRes = await fetch(`/status/${fileHash}`);
                         if (!statusRes.ok) throw new Error("Polling failed");
                         json = await statusRes.json();
 
                         if (json.status === 'error') throw new Error(json.error_message || "Unknown Error");
-                        // If it has catalog_info or technical_metadata, it's done
                         if (json.catalog_info || json.metadata?.catalog_info || json._is_cached) break;
-                        // If still processing, continue loop
+                        attempts++;
                     }
+                    if (attempts >= maxAttempts) throw new Error("Processing timed out. Please try again.");
                 }
 
-                next.data = json.metadata || json;
+                // Merge: file_hash/original_filename always; for PDF keep tables/lineage/confidence from top level
+                const payload = json.metadata || json;
+                next.data = {
+                    ...payload,
+                    file_hash: json.file_hash,
+                    original_filename: json.original_filename,
+                    ...(json.tables && { tables: json.tables }),
+                    ...(json.lineage && { lineage: json.lineage }),
+                    ...(json.confidence !== undefined && { confidence: json.confidence })
+                };
                 next.status = 'success';
                 if (!selectedFileId) selectFile(next.id);
 

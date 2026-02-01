@@ -1,5 +1,9 @@
-fastapi
-uvicorn
+# Core API
+fastapi>=0.109,<1.0
+uvicorn>=0.27,<1.0
+python-multipart
+
+# PDF & tables
 pdfplumber
 pymupdf
 camelot-py
@@ -8,15 +12,19 @@ pillow
 pdf2image
 easyocr
 opencv-python-headless
-python-multipart
+openpyxl
+
+# AI (Gemini)
 google-genai
 python-dotenv
-openpyxl
-# Scalability
+
+# Scalability (optional: set USE_S3, DATABASE_URL, USE_CELERY)
 boto3
 sqlalchemy
 psycopg2-binary
 celery
 redis
 httpx
+
+# Dev / test
 pytest

@@ -4,9 +4,8 @@ import glob
 from dotenv import load_dotenv
 from google import genai
 from ingester import extract_file_info  # Import your working ingester logic
+from pdf_service.metadata_generator import get_prioritized_models, generate_metadata_with_retry
 
-# --- 1. SETUP & CONFIG ---
-load_dotenv()
 # --- 1. SETUP & CONFIG ---
 load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
@@ -17,36 +16,9 @@ else:
     client = None
     print("WARNING: GEMINI_API_KEY not found. Harmonization will fail.")
 
-# The specific model ID for API access.
-# --- 2. ROBUST GENERATION LOGIC (Shared with PDF Service for Consistency) ---
-def get_prioritized_models(client):
-    """Returns prioritized list of models, enabling fallback."""
-    try:
-        # Simple hardcoded preference for speed and stability
-        return ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-pro"]
-    except:
-        return ["gemini-1.5-flash"]
-
-def generate_with_retry(model_id, prompt, max_retries=3):
-    import time
-    import random
-    
-    for attempt in range(max_retries):
-        try:
-            response = client.models.generate_content(
-                model=model_id,
-                contents=prompt
-            )
-            return response
-        except Exception as e:
-            if "429" in str(e) or "503" in str(e):
-                wait = (2 ** attempt) + random.uniform(0, 1)
-                time.sleep(wait)
-            elif attempt == max_retries - 1:
-                raise e
-            else:
-                time.sleep(1)
-    return None
+def _generate_with_retry_harmonizer(model_id, prompt, max_retries=3):
+    """Thin wrapper so harmonizer can use same retry logic; metadata_generator has its own client."""
+    return generate_metadata_with_retry(model_id, prompt, max_retries)
 
 def get_aikosh_metadata(raw_data):
     """
@@ -104,18 +76,16 @@ def get_aikosh_metadata(raw_data):
     - Output ONLY valid JSON.
     """
     
-    candidates = get_prioritized_models(client)
-    last_err = None
-    
-    # RUNTIME SAFETY CHECK
     if not client:
         print("CRITICAL ERROR: GEMINI_API_KEY is missing/invalid. Cannot contact AI.")
         return {"error": "All models failed (Missing API Key)", "details": "Please set GEMINI_API_KEY in Render Environment Variables"}
 
+    candidates = get_prioritized_models(client)
+    last_err = None
+
     for model_id in candidates:
         try:
-            # print(f"Harmonizing with {model_id}...")
-            response = generate_with_retry(model_id, prompt)
+            response = _generate_with_retry_harmonizer(model_id, prompt)
             if not response: continue
             
             raw_text = response.text.strip()

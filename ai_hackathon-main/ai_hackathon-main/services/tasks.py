@@ -1,5 +1,5 @@
 import os
-import shutil
+import tempfile
 from typing import Dict, Any
 from celery_app import celery_app
 from services.storage import get_storage_service
@@ -14,6 +14,10 @@ from ingester import extract_file_info
 from harmonizer import get_aikosh_metadata
 from pdf_service.orchestrator import process_pdf
 
+def _idmo_blob(data: dict) -> dict:
+    """Get the IDMO metadata blob (for harmonize it's top-level; for PDF it's under 'metadata')."""
+    return data.get("metadata") or data
+
 @celery_app.task(bind=True)
 def process_file_task(self, file_hash: str, filename: str, task_type: str = "harmonize"):
     """
@@ -25,9 +29,10 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
     storage = get_storage_service()
     db = get_db_service()
 
-    # Create a temp file for processing
-    # Models like pandas/fitz often need a physical file on disk
-    temp_path = f"temp_worker_{file_hash}_{filename}"
+    # Safe temp file: filename may contain path separators on some systems
+    ext = os.path.splitext(filename)[1] or ".bin"
+    fd, temp_path = tempfile.mkstemp(suffix=ext, prefix="aikosh_worker_")
+    os.close(fd)
     
     try:
         print(f"[Worker] Processing {filename} ({task_type})")
@@ -68,10 +73,19 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
         result_metadata["_worker_processed"] = True
 
         # CRITICAL: explicit status update for frontend polling
+        # For PDF, error is inside result_metadata["metadata"]
         print(f"[Worker] Step 5: Checking for errors in result")
-        if "error" in result_metadata or result_metadata.get("title") == "Processing Error":
+        idmo = _idmo_blob(result_metadata)
+        has_error = (
+            "error" in result_metadata or result_metadata.get("title") == "Processing Error"
+            or "error" in idmo or idmo.get("title") == "Processing Error"
+        )
+        if has_error:
             result_metadata["status"] = "error"
-            result_metadata["error_message"] = result_metadata.get("error") or result_metadata.get("summary")
+            result_metadata["error_message"] = (
+                result_metadata.get("error") or result_metadata.get("summary")
+                or idmo.get("error") or idmo.get("summary") or "Processing failed"
+            )
             print(f"[Worker] Failure Detected: {result_metadata['error_message']}")
         else:
             result_metadata["status"] = "success"
