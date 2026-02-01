@@ -117,7 +117,7 @@
                         <i data-lucide="trash-2" class="w-5 h-5"></i>
                     </button>
                 </div>
-                <input type="file" id="fileInput" accept=".pdf,.csv,.xlsx" multiple hidden>
+                <input type="file" id="fileInput" accept=".pdf,.csv,.xlsx,.xls" multiple hidden>
             </div>
 
             <!-- File List -->
@@ -153,9 +153,9 @@
                     <h3 class="text-xl font-semibold text-white mb-2">Upload Data Files</h3>
                     <p class="text-slate-400 mb-6">Drag & drop PDF, CSV, or Excel files here<br>to start harmonization.
                     </p>
-                    <span
+                    <span id="maxSizeHint"
                         class="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
-                        <i data-lucide="info" class="w-3 h-3"></i> Max file size: 10MB
+                        <i data-lucide="info" class="w-3 h-3"></i> Max file size: <span id="maxSizeValue">25MB</span>
                     </span>
                 </div>
             </div>
@@ -267,6 +267,7 @@
         let filesQueue = [];
         let selectedFileId = null;
         let isProcessing = false;
+        let maxUploadMb = 25;
 
         // --- ELEMENTS ---
         const fileInput = document.getElementById('fileInput');
@@ -277,19 +278,40 @@
         const downloadAllBtn = document.getElementById('downloadAllBtn');
         const synthesizeBtn = document.getElementById('synthesizeBtn');
 
+        // --- INIT: fetch max upload from server (Render / env)
+        fetch('/health').then(r => r.json()).then(d => {
+            if (d.max_upload_mb) { maxUploadMb = d.max_upload_mb; document.getElementById('maxSizeValue').textContent = maxUploadMb + 'MB'; }
+        }).catch(() => {});
+
         // --- LISTENERS ---
         fileInput.addEventListener('change', e => addFiles(e.target.files));
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             dropZone.addEventListener(eventName, e => { e.preventDefault(); e.stopPropagation(); });
         });
-        dropZone.addEventListener('drop', e => addFiles(e.dataTransfer.files));
+        dropZone.addEventListener('drop', e => { addFiles(e.dataTransfer.files); dropZone.classList.remove('ring-2', 'ring-orange-500'); });
+        dropZone.addEventListener('dragenter', () => dropZone.classList.add('ring-2', 'ring-orange-500'));
+        dropZone.addEventListener('dragleave', (e) => { if (!e.currentTarget.contains(e.relatedTarget)) dropZone.classList.remove('ring-2', 'ring-orange-500'); });
+        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); });
+
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-4 right-4 px-4 py-3 rounded-lg shadow-lg z-[100] max-w-sm ' +
+                (type === 'error' ? 'bg-red-900/90 text-red-100 border border-red-700' : 'bg-slate-800 text-slate-200 border border-slate-600');
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
 
         // --- LOGIC ---
         function addFiles(fileList) {
+            const maxBytes = maxUploadMb * 1024 * 1024;
+            let rejected = 0;
             Array.from(fileList).forEach(file => {
+                if (file.size > maxBytes) { rejected++; return; }
                 const id = Math.random().toString(36).substr(2, 9);
                 filesQueue.push({ id, file, status: 'pending', data: null, errorMsg: null });
             });
+            if (rejected) showToast(rejected + ' file(s) skipped: over ' + maxUploadMb + 'MB limit.', 'error');
             renderList();
             processQueue();
         }
@@ -305,7 +327,7 @@
 
             try {
                 let endpoint = '/process-pdf';
-                if (next.file.name.match(/\.(csv|xlsx)$/i)) endpoint = '/harmonize';
+                if (next.file.name.match(/\.(csv|xlsx|xls)$/i)) endpoint = '/harmonize';
 
                 const formData = new FormData();
                 formData.append('file', next.file);
@@ -313,10 +335,13 @@
                 const res = await fetch(endpoint, { method: 'POST', body: formData });
                 if (!res.ok) {
                     const errText = await res.text();
+                    let msg = "Server Error " + res.status;
                     try {
                         const errJson = JSON.parse(errText);
-                        throw new Error(errJson.detail || "Server Error " + res.status);
-                    } catch (e) { throw new Error("Server Error " + res.status); }
+                        const d = errJson.detail;
+                        msg = (typeof d === 'string') ? d : (Array.isArray(d) && d[0]?.msg) ? d[0].msg : (d?.msg || msg);
+                    } catch (e) { if (res.status === 413) msg = "File too large. Max size: " + maxUploadMb + "MB."; }
+                    throw new Error(msg);
                 }
 
                 let json = await res.json();
@@ -445,11 +470,11 @@
 
             // --- RICH VISUALIZATIONS ---
 
-            // 1. Confidence Bar (If available)
-            if (meta.confidence) {
-                const conf = meta.confidence.overall_score || 0;
-                const confColor = conf > 0.8 ? 'text-green-500' : (conf > 0.5 ? 'text-yellow-500' : 'text-red-500');
-                document.getElementById('detScore').innerText = conf.toFixed(2);
+            // 1. Confidence (number from PDF pipeline or nested object)
+            const confVal = typeof meta.confidence === 'number' ? meta.confidence : (meta.confidence?.overall_score ?? meta.technical_metadata?.ai_readiness_level);
+            if (confVal != null) {
+                const confColor = confVal > 0.8 ? 'text-green-500' : (confVal > 0.5 ? 'text-yellow-500' : 'text-red-500');
+                document.getElementById('detScore').innerText = Number(confVal).toFixed(2);
                 document.getElementById('detScore').className = `text-4xl font-bold ${confColor} relative z-10`;
             }
 
@@ -535,7 +560,7 @@
 
         function copyJSON() {
             navigator.clipboard.writeText(document.getElementById('detJson').innerText);
-            alert("Copied to clipboard");
+            showToast('JSON copied to clipboard', 'info');
         }
 
         async function synthesizeBatch() {

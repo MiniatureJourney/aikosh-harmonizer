@@ -63,6 +63,8 @@ If you want to modify the code or contribute:
     uvicorn api:app --reload
     ```
 
+5.  **Deployed on Render?** Set `MAX_UPLOAD_MB=25` (or lower if you see 413) in Environment Variables so PDFs and larger files are accepted.
+
 ---
 
 ## 📄 License

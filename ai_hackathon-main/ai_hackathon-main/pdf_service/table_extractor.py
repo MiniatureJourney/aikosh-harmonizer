@@ -1,4 +1,12 @@
 import camelot
+import math
+
+def _clean_cell(cell):
+    """Normalize a table cell: strip whitespace, NaN/None -> empty string."""
+    if cell is None or (isinstance(cell, float) and math.isnan(cell)):
+        return ""
+    s = str(cell).strip()
+    return s
 
 def extract_tables(pdf_path: str):
     try:
@@ -8,20 +16,17 @@ def extract_tables(pdf_path: str):
 
     extracted = []
     for i, table in enumerate(tables):
-        # Convert to list of lists (much easier for frontend to render)
-        # to_dict('split') returns {'index': [], 'columns': [], 'data': [[row1], [row2]]}
-        # We just want the data including headers if possible, or just raw values.
-        # camelot dataframe usually lacks headers unless parsed. 
-        # We'll use values.tolist() which gives the raw grid.
         data_grid = table.df.values.tolist()
-        
+        # Clean malformed cells: strip, normalize NaN/None
+        cleaned_grid = [[_clean_cell(c) for c in row] for row in data_grid]
+
         extracted.append({
             "table_id": i,
             "page": table.page,
-            "accuracy": table.accuracy, # Real metadata
+            "accuracy": table.accuracy,
             "whitespace": table.whitespace,
             "order": table.order,
-            "data": data_grid # Array of Arrays
+            "data": cleaned_grid,
         })
 
     return extracted

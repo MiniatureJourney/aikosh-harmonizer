@@ -27,9 +27,11 @@ app.add_middleware(
 storage = get_storage_service()
 db = get_db_service()
 
-# Config
+# Config (Render: set MAX_UPLOAD_MB if needed; free tier often allows ~25MB request body)
+MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "25"))
+MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 USE_CELERY = os.getenv("USE_CELERY", "false").lower() == "true"
-OUTPUT_DIR = "outputs" # Still used for CSV generation temporarily
+OUTPUT_DIR = "outputs"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -41,7 +43,12 @@ async def root():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "message": "Service is healthy", "mode": "Async" if USE_CELERY else "Sync"}
+    return {
+        "status": "ok",
+        "message": "Service is healthy",
+        "mode": "Async" if USE_CELERY else "Sync",
+        "max_upload_mb": MAX_UPLOAD_MB,
+    }
 
 @app.post("/harmonize")
 async def harmonize_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
@@ -52,12 +59,12 @@ async def process_pdf_endpoint(background_tasks: BackgroundTasks, file: UploadFi
     return await handle_upload(file, "pdf", background_tasks)
 
 async def handle_upload(file: UploadFile, task_type: str, background_tasks: BackgroundTasks):
-    # 1. Read & Hash
     content = await file.read()
-    
-    # 10MB Limit
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Max size: {MAX_UPLOAD_MB}MB. Your file: {len(content) / (1024*1024):.1f}MB.",
+        )
 
     file_hash = get_file_hash(content)
 

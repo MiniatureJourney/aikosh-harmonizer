@@ -92,6 +92,35 @@ sudo systemctl start harmonizer
 
 ---
 
+## Option 3: Render + GitHub
+Deploy from a GitHub repo so Render builds and runs the app automatically.
+
+### 1. Connect GitHub
+- Go to [Render](https://render.com) → New → Web Service.
+- Connect your GitHub account and select the repository (e.g. `ai_hackathon-main`).
+- Root directory: set to the app folder if the repo has nested structure (e.g. `ai_hackathon-main/ai_hackathon-main`).
+
+### 2. Build & Run
+- **Build Command:** `pip install -r requirements.txt` (or use Docker: set Dockerfile path).
+- **Start Command:** `uvicorn api:app --host 0.0.0.0 --port $PORT`
+- **Environment:** Add variables in Render dashboard (see below).
+
+### 3. Environment Variables (Render)
+| Variable | Required | Notes |
+|---------|----------|--------|
+| `GEMINI_API_KEY` | Yes | From Google AI Studio |
+| `MAX_UPLOAD_MB` | No | Default 25. Render free tier allows ~25MB request body; set lower if you see 413. |
+| `DATABASE_URL` | No | Postgres connection string (Render Postgres). If unset, uses local JSON cache. |
+| `REDIS_URL` | No | For Celery async workers. If unset, uses in-process BackgroundTasks. |
+| `USE_CELERY` | No | Set `true` to use Celery (requires Redis). |
+
+### 4. Avoiding 413 (Payload Too Large)
+- Render limits request body size. Default app limit is **25MB** (`MAX_UPLOAD_MB=25`).
+- If PDFs still return 413, set `MAX_UPLOAD_MB=20` or lower to stay under platform limits.
+- The UI shows the current limit from `/health` (max_upload_mb).
+
+---
+
 ## Cloud Platform Notes
-- **Render/Railway**: You can deploy using the `Dockerfile`.
-- **Warning**: These platforms often have "ephemeral filesystems". Files uploaded to `uploads/` will be **deleted** when the app restarts unless you configure a "Persistent Volume" (available on Railway/Render Paid plans).
+- **Render/Railway**: You can deploy using the `Dockerfile` or native Python (see Option 3).
+- **Warning**: Ephemeral filesystems: files in `uploads/` and `outputs/` are lost on restart unless you use a Persistent Disk (Render paid) or external storage (S3 + `USE_S3=true`).
