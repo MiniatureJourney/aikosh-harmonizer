@@ -64,12 +64,20 @@ async def handle_upload(file: UploadFile, task_type: str, background_tasks: Back
     # 2. Check DB (Cache)
     cached = db.get_metadata(file_hash)
     if cached:
-        print(f"Cache Hit: {file_hash}")
-        # If it was an error before, we might want to retry? For now return as is.
-        if cached.get("status") == "error":
-             pass # optionally retry
-        else:
+        print(f"Cache Hit: {file_hash} Status: {cached.get('status')}")
+        
+        # FIX: If it's stuck in "processing" for a re-upload, it's likely a zombie job.
+        # We should force re-process it.
+        if cached.get("status") == "success":
              return cached
+        elif cached.get("status") == "error":
+             # Optional: retry if user wants, but for now return error
+             pass 
+        else:
+             # Status is "processing" (or None) but user submitted again.
+             # Assume zombie -> Fall through to dispatch new task.
+             print("Stale 'processing' job found. Re-queueing...")
+             pass
 
     # 3. Upload to Storage (S3 or Local)
     # We use file_hash + extension as unique name
