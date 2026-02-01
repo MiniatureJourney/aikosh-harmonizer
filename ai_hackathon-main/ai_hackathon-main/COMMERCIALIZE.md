@@ -54,42 +54,68 @@ git push -u origin master
 
 ## Phase 4: Go Live! (3 Minutes)
 
-This is where the magic happens.
+# Commercial Deployment Guide
 
-1.  Go to your **Render Dashboard**.
-2.  Click **"New +"** (top right) -> Select **"Web Service"**.
-3.  You should see your `aikosh-harmonizer` repository in the list. Click **"Connect"**.
-4.  **Configure the settings**:
-    *   **Name**: `aikosh-harmonizer` (or whatever you want your site to be called).
-    *   **Region**: Choose the one closest to your customers (e.g., Singapore or Frankfurt).
-    *   **Branch**: `master` (or `main`).
-    *   **Runtime**: Select **"Docker"** (This is VERY important).
-    *   **Root Directory**: `ai_hackathon-main/ai_hackathon-main`
-        *   *Why?* Your code is inside a sub-folder, so we must tell Render where to find it.
-5.  **Environment Variables**:
-    *   Scroll down to "Environment Variables".
-    *   Click "Add Environment Variable".
-    *   **Key**: `GEMINI_API_KEY`
-    *   **Value**: *Target your actual API Key here* (e.g., `AIzaSy...`).
-6.  Click **"Create Web Service"**.
+This guide details how to deploy **AIKosh Enterprise** to a commercial environment like **Render**.
 
-Render will now build your Commercial Website. It might take 5-10 minutes the first time. Watch the logs!
+## 1. Prerequisites
+Ensure your project is compliant with the following structure (already configured):
+- `Dockerfile`: Defines the system environment (Python 3.11).
+- `.dockerignore`: Excludes unnecessary files.
+- `requirements.txt`: Lists all Python dependencies.
+
+## 2. Deployment Steps (Render)
+
+### Step 1: Create Web Service
+1.  Log in to [Render.com](https://render.com).
+2.  Click **New +** -> **Web Service**.
+3.  Connect your GitHub repository: `aikosh-harmonizer`.
+4.  Give it a name (e.g., `aikosh-app`).
+
+### Step 2: Configure Environment
+In the setup screen, ensure these settings are correct:
+
+| Setting | Value |
+| :--- | :--- |
+| **Runtime** | `Docker` |
+| **Region** | `Singapore` (or nearest to you) |
+| **Branch** | `main` |
+| **Root Directory** | `ai_hackathon-main/ai_hackathon-main` |
+
+### Step 3: Environment Variables
+You **MUST** set the following environment variable for the AI to work:
+
+1.  Click **"Advanced"** or **"Environment Variables"**.
+2.  Add Key: `GEMINI_API_KEY`
+3.  Add Value: `(Your Google Gemini API Key)`
+
+Click **Create Web Service**. Render will build and deploy your app.
 
 ---
 
-## Phase 5: Connect a Custom Domain (Optional)
+## 3. Enterprise Scaling (Optional)
+The application handles scaling automatically if you provide the following optional configuration variables. **You do not need to change the code.**
 
-To make it truly "Commercial" (like `www.yourcompany.com` instead of `onrender.com`):
+### Phase A: Persistent Storage (AWS S3)
+*Prevents data loss when the server restarts.*
+- `USE_S3`: `true`
+- `S3_BUCKET_NAME`: `your-bucket-name`
+- `AWS_ACCESS_KEY_ID`: `...`
+- `AWS_SECRET_ACCESS_KEY`: `...`
+- `AWS_REGION`: `us-east-1`
 
-1.  Buy a domain from Namecheap, GoDaddy, or Cloudflare.
-2.  In Render dashboard: Go to **Settings** -> **Custom Domains**.
-3.  Click **"Add Custom Domain"**.
-4.  Enter your domain (e.g., `www.my-aikosh-tool.com`).
-5.  Render will verify it and give you DNS records to add to your domain provider.
+### Phase B: Production Database (PostgreSQL)
+*Enables robust data management and querying.*
+- `DATABASE_URL`: (Render automatically provides this if you add a Postgres database).
+
+### Phase C: High-Performance Workers (Celery)
+*Handles heavy traffic without freezing the app.*
+- `USE_CELERY`: `true`
+- `REDIS_URL`: (Render automatically provides this if you add a Redis instance).
 
 ---
 
-## Troubleshooting
-
-- **"Build Failed"**: Check the logs. Did you forget to add the API Key?
-- **"Application Error"**: This usually means the app started but crashed. Check the "Logs" tab in Render for Python errors.
+## 4. Troubleshooting
+- **502 Bad Gateway**: Usually means the application crashed. Check the **Logs** tab.
+- **ModuleNotFoundError**: A dependency is missing from `requirements.txt`.
+- **Memory Error**: The free tier has 512MB RAM. We have optimized the code to fit, but extremely large PDF processing might still spike memory.

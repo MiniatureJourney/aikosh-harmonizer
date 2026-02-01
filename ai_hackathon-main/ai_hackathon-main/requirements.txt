@@ -12,3 +12,11 @@ python-multipart
 google-genai
 python-dotenv
 openpyxl
+# Scalability
+boto3
+sqlalchemy
+psycopg2-binary
+celery
+redis
+httpx
+pytest

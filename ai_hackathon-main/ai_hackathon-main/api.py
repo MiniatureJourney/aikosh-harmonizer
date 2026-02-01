@@ -1,20 +1,19 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import shutil
 import os
-from pdf_service.orchestrator import process_pdf
-from pdf_service.cache_manager import get_file_hash, get_cached_metadata, save_to_cache
-from harmonizer import get_aikosh_metadata
-from synthesizer import synthesize_metadata
-from ingester import extract_file_info
+import json
+from services.storage import get_storage_service
+from services.database import get_db_service
+from services.tasks import process_file_task
+from pdf_service.cache_manager import get_file_hash # Keep this util
 import uvicorn
 from typing import List, Dict, Any
-
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-app = FastAPI(title="AI Hackathon API")
+app = FastAPI(title="AI Hackathon API - Scalable")
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,181 +23,151 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize Services
+storage = get_storage_service()
+db = get_db_service()
 
-UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "outputs"
-
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# Config
+USE_CELERY = os.getenv("USE_CELERY", "false").lower() == "true"
+OUTPUT_DIR = "outputs" # Still used for CSV generation temporarily
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-# Mount the static directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 @app.head("/")
 async def root():
-    # Serve the index.html
     return FileResponse('static/index.html')
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "message": "Service is healthy"}
-
-from starlette.concurrency import run_in_threadpool
+    return {"status": "ok", "message": "Service is healthy", "mode": "Async" if USE_CELERY else "Sync"}
 
 @app.post("/harmonize")
-async def harmonize_endpoint(file: UploadFile = File(...)):
-    # 1. Read content for hashing
+async def harmonize_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    return await handle_upload(file, "harmonize", background_tasks)
+
+@app.post("/process-pdf")
+async def process_pdf_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    return await handle_upload(file, "pdf", background_tasks)
+
+async def handle_upload(file: UploadFile, task_type: str, background_tasks: BackgroundTasks):
+    # 1. Read & Hash
     content = await file.read()
     
-    # [STABILITY FIX] Limit file size to 10MB to prevent Render Free Tier crash (502)
-    MAX_SIZE = 10 * 1024 * 1024
-    if len(content) > MAX_SIZE:
-        raise HTTPException(status_code=413, detail="File too large. Max limit is 10MB for this free server.")
+    # 10MB Limit
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="File too large (Max 10MB)")
 
     file_hash = get_file_hash(content)
 
-    # 2. Check Cache
-    cached = get_cached_metadata(file_hash)
+    # 2. Check DB (Cache)
+    cached = db.get_metadata(file_hash)
     if cached:
-        print(f"Returning cached result for {file.filename}")
-        return cached # Harmonizer returns direct metadata dict
+        print(f"Cache Hit: {file_hash}")
+        # If it was an error before, we might want to retry? For now return as is.
+        if cached.get("status") == "error":
+             pass # optionally retry
+        else:
+             return cached
 
-    # 3. Save file permanently (using hash as ID) for later retrieval/download
-    file_ext = os.path.splitext(file.filename)[1]
-    saved_filename = os.path.join(UPLOAD_DIR, f"{file_hash}{file_ext}")
+    # 3. Upload to Storage (S3 or Local)
+    # We use file_hash + extension as unique name
+    ext = os.path.splitext(file.filename)[1]
+    storage_filename = f"{file_hash}{ext}"
     
-    with open(saved_filename, "wb") as f:
-        f.write(content)
-
     try:
-        # Generate metadata
-        # Offload blocking operations to threadpool for smoothness
-        raw_info = await run_in_threadpool(extract_file_info, saved_filename)
-        metadata = await run_in_threadpool(get_aikosh_metadata, raw_info)
+        storage.save(content, storage_filename)
         
-        # Add file_hash to metadata for frontend reference
-        metadata["file_hash"] = file_hash
-        metadata["original_filename"] = file.filename
-        
-        # 4. Save to Cache
-        save_to_cache(file_hash, metadata)
-        
-        return metadata
+        # 4. Dispatch Task
+        # Initial status
+        db.save_metadata(file_hash, {"status": "processing", "file_hash": file_hash, "original_filename": file.filename})
+
+        if USE_CELERY:
+            # Phase 2: Async Worker
+            process_file_task.delay(file_hash, storage_filename, task_type)
+        else:
+            # Fallback: BackgroundTasks (Phase 1.5)
+            # This runs in the same process but after response is sent (if we return) 
+            # OR we can just await it for "Simple" mode users who don't want polling.
+            # To support the "Polling" UI, we MUST return immediately.
+            background_tasks.add_task(process_file_task, None, file_hash, storage_filename, task_type)
+
+        return {"status": "processing", "file_hash": file_hash, "message": "File uploaded, processing started."}
+
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/status/{file_hash}")
+async def get_status(file_hash: str):
+    data = db.get_metadata(file_hash)
+    if not data:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return data
 
 @app.get("/download-harmonized/{file_hash}")
 async def download_harmonized(file_hash: str):
-    # 1. correct file path logic
-    # Find the file with any extension
-    matching_files = [f for f in os.listdir(UPLOAD_DIR) if f.startswith(file_hash)]
-    if not matching_files:
-        raise HTTPException(status_code=404, detail="File not found")
-        
-    file_path = os.path.join(UPLOAD_DIR, matching_files[0])
-    
-    # 2. Get Metadata
-    metadata = get_cached_metadata(file_hash)
-    if not metadata:
-        raise HTTPException(status_code=404, detail="Metadata not found")
-        
-    # 3. Create Harmonized CSV
+    # Retrieve metadata to generate CSV
+    metadata = db.get_metadata(file_hash)
+    if not metadata or metadata.get("status") == "processing":
+         raise HTTPException(status_code=404, detail="File not ready or not found")
+
     try:
-        import pandas as pd
+        # We need the original file to create CSV. 
+        # Download it to temp
+        ext = os.path.splitext(metadata.get("original_filename", "data.csv"))[1]
+        storage_filename = f"{file_hash}{ext}"
         
-        # Read Original
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext == '.csv':
-            df = pd.read_csv(file_path)
-        elif ext in ['.xlsx', '.xls']:
-            df = pd.read_excel(file_path)
-        else:
-            return FileResponse(file_path) # Fallback for PDF
+        try:
+            content = storage.get(storage_filename)
+        except Exception:
+             raise HTTPException(status_code=404, detail="Source file not found in storage")
             
-        # Get Schema Mapping
+        temp_input = f"temp_dl_{file_hash}{ext}"
+        with open(temp_input, "wb") as f:
+            f.write(content)
+
+        # Generate CSV (Logic borrowed from original api.py)
+        import pandas as pd
+        if ext == '.csv':
+            df = pd.read_csv(temp_input)
+        elif ext in ['.xlsx', '.xls']:
+            df = pd.read_excel(temp_input)
+        else:
+            return FileResponse(temp_input) 
+
+        # Map Headers
         schema = metadata.get("technical_metadata", {}).get("schema_details", [])
-        rename_map = {}
-        for item in schema:
-            if "column" in item and "standardized_header" in item:
-                rename_map[item["column"]] = item["standardized_header"]
-                
-        # Apply Renaming
+        rename_map = {item["column"]: item["standardized_header"] for item in schema if "column" in item}
         if rename_map:
             df.rename(columns=rename_map, inplace=True)
-            
-        # Save to Output
+
         output_filename = f"harmonized_{metadata.get('catalog_info', {}).get('title', 'data')}.csv"
-        # Sanitize filename
+        # Sanitize
         output_filename = "".join([c for c in output_filename if c.isalpha() or c.isdigit() or c in (' ', '.', '_')]).strip()
         output_path = os.path.join(OUTPUT_DIR, output_filename)
-        
         df.to_csv(output_path, index=False)
         
+        # Clean temp
+        if os.path.exists(temp_input):
+            os.remove(temp_input)
+
         return FileResponse(output_path, filename=output_filename)
-        
+
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/process-pdf")
-async def process_pdf_endpoint(file: UploadFile = File(...)):
-    # 1. Read file content for hashing
-    content = await file.read()
-    
-    # [STABILITY FIX] Limit file size to 10MB
-    MAX_SIZE = 10 * 1024 * 1024
-    if len(content) > MAX_SIZE:
-        raise HTTPException(status_code=413, detail="File too large. Max limit is 10MB.")
-
-    file_hash = get_file_hash(content)
-    
-    # 2. Check Cache
-    cached = get_cached_metadata(file_hash)
-    if cached:
-        print(f"Returning cached result for {file.filename}")
-        return {"metadata": cached}
-
-    # 3. Save temp file for processing (orchestrator expects path)
-    temp_filename = f"temp_{file.filename}"
-    with open(temp_filename, "wb") as f:
-        f.write(content)
-
-    try:
-        # Offload blocking PDF operations
-        result = await run_in_threadpool(process_pdf, temp_filename)
-        
-        # 4. Save to Cache
-        if result and "metadata" in result:
-             # We cache the full result object or just metadata depending on usage.
-             # Here we return {metadata: ...} implies 'result' is the full object.
-             # Orchestrator returns a dict with 'metadata' key.
-             save_to_cache(file_hash, result["metadata"])
-             
-        return {"metadata": result["metadata"]}
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if os.path.exists(temp_filename):
-            os.remove(temp_filename)
 
 @app.post("/synthesize")
 async def synthesize_endpoint(metadata_list: List[Dict[Any, Any]]):
+    from synthesizer import synthesize_metadata
     try:
-        if not metadata_list:
-            raise HTTPException(status_code=400, detail="No metadata provided")
-        
-        result = synthesize_metadata(metadata_list)
-        return result
+        return synthesize_metadata(metadata_list)
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
