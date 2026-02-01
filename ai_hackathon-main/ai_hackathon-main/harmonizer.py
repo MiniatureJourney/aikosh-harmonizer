@@ -7,19 +7,52 @@ from ingester import extract_file_info  # Import your working ingester logic
 
 # --- 1. SETUP & CONFIG ---
 load_dotenv()
+# --- 1. SETUP & CONFIG ---
+load_dotenv()
 api_key = os.getenv("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key)
+
+if api_key:
+    client = genai.Client(api_key=api_key)
+else:
+    client = None
+    print("WARNING: GEMINI_API_KEY not found. Harmonization will fail.")
 
 # The specific model ID for API access.
-# gemini-1.5-flash is the fastest and most reliable commercial model for this task.
-MODEL_ID = "gemini-1.5-flash" 
+# --- 2. ROBUST GENERATION LOGIC (Shared with PDF Service for Consistency) ---
+def get_prioritized_models(client):
+    """Returns prioritized list of models, enabling fallback."""
+    try:
+        # Simple hardcoded preference for speed and stability
+        return ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-pro"]
+    except:
+        return ["gemini-1.5-flash"]
 
-# --- 2. THE HARMONIZATION LOGIC ---
+def generate_with_retry(model_id, prompt, max_retries=3):
+    import time
+    import random
+    
+    for attempt in range(max_retries):
+        try:
+            response = client.models.generate_content(
+                model=model_id,
+                contents=prompt
+            )
+            return response
+        except Exception as e:
+            if "429" in str(e) or "503" in str(e):
+                wait = (2 ** attempt) + random.uniform(0, 1)
+                time.sleep(wait)
+            elif attempt == max_retries - 1:
+                raise e
+            else:
+                time.sleep(1)
+    return None
+
 def get_aikosh_metadata(raw_data):
     """
     Sends raw metadata to Gemma and forces it to return an AIKosh-compatible JSON.
+    Uses robust fallback logic.
     """
-    import time
     
     prompt = f"""
     Act as a Senior Data Architect for the **India Data Management Office (IDMO)**.
@@ -71,16 +104,15 @@ def get_aikosh_metadata(raw_data):
     - Output ONLY valid JSON.
     """
     
-    # Retry Logic for Smoothness
-    max_retries = 3
-    for attempt in range(max_retries):
+    candidates = get_prioritized_models(client)
+    last_err = None
+    
+    for model_id in candidates:
         try:
-            response = client.models.generate_content(
-                model=MODEL_ID,
-                contents=prompt
-            )
+            # print(f"Harmonizing with {model_id}...")
+            response = generate_with_retry(model_id, prompt)
+            if not response: continue
             
-            # --- 3. RESPONSE CLEANING ---
             raw_text = response.text.strip()
             
             if "```json" in raw_text:
@@ -91,11 +123,11 @@ def get_aikosh_metadata(raw_data):
             return json.loads(raw_text.strip())
             
         except Exception as e:
-            print(f"Attempt {attempt+1} failed: {e}")
-            if attempt < max_retries - 1:
-                time.sleep(2) # Wait before retry
-            else:
-                return {"error": f"Harmonization failed after retries: {str(e)}", "raw_output": str(e)}
+            print(f"Model {model_id} failed: {e}")
+            last_err = e
+            continue
+            
+    return {"error": "All models failed", "details": str(last_err)}
 
 # --- 4. EXECUTION BLOCK ---
 if __name__ == "__main__":
