@@ -64,6 +64,8 @@ This is where the magic happens.
     *   **Region**: Choose the one closest to your customers (e.g., Singapore or Frankfurt).
     *   **Branch**: `master` (or `main`).
     *   **Runtime**: Select **"Docker"** (This is VERY important).
+    *   **Root Directory**: `ai_hackathon-main/ai_hackathon-main`
+        *   *Why?* Your code is inside a sub-folder, so we must tell Render where to find it.
 5.  **Environment Variables**:
     *   Scroll down to "Environment Variables".
     *   Click "Add Environment Variable".
