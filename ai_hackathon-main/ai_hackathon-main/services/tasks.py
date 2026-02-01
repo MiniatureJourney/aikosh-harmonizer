@@ -42,18 +42,25 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
         result_metadata = {}
 
         # 2. Process
+        print(f"[Worker] Step 1: Processing started for {task_type}")
         if task_type == "harmonize":
             # Excel/CSV
+            print(f"[Worker] Step 2: Extracting info from {temp_path}")
             raw_info = extract_file_info(temp_path)
             # Need to patch the filename in raw_info because temp_path is ugly
             raw_info.filename = filename 
+            
+            print(f"[Worker] Step 3: Calling Harmonizer (AI)")
             result_metadata = get_aikosh_metadata(raw_info)
+            print(f"[Worker] Step 4: Harmonization Complete")
             
         elif task_type == "pdf":
+            print(f"[Worker] Step 2: Orchestrating PDF")
             # PDF Orchestrator
             result = process_pdf(temp_path)
             # Save FULL result (tables, lineage, etc)
             result_metadata = result
+            print(f"[Worker] Step 3: PDF Complete")
 
         # Add tracking info
         result_metadata["file_hash"] = file_hash
@@ -61,13 +68,16 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
         result_metadata["_worker_processed"] = True
 
         # CRITICAL: explicit status update for frontend polling
+        print(f"[Worker] Step 5: Checking for errors in result")
         if "error" in result_metadata or result_metadata.get("title") == "Processing Error":
             result_metadata["status"] = "error"
             result_metadata["error_message"] = result_metadata.get("error") or result_metadata.get("summary")
+            print(f"[Worker] Failure Detected: {result_metadata['error_message']}")
         else:
             result_metadata["status"] = "success"
         
         # 3. Save to DB
+        print(f"[Worker] Step 6: Saving to DB")
         db.save_metadata(file_hash, result_metadata)
         print(f"[Worker] Finished {filename}")
         
