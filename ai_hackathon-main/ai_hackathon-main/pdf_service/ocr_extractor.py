@@ -3,13 +3,22 @@ import fitz # PyMuPDF
 import numpy as np
 from PIL import Image
 
-# Initialize Reader once to be reused
-reader = easyocr.Reader(['en'])
+# Global variable for lazy loading
+_reader = None
+
+def get_reader():
+    global _reader
+    if _reader is None:
+        print("Lazy loading EasyOCR Model...")
+        # gpu=False significantly reduces memory overhead on CPU-only envs like Render Free Tier
+        _reader = easyocr.Reader(['en'], gpu=False)
+    return _reader
 
 def ocr_pdf(pdf_path: str):
     pages = []
     
     try:
+        reader = get_reader() # Get the lazy-loaded reader
         doc = fitz.open(pdf_path)
         
         for i, page in enumerate(doc):
