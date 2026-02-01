@@ -14,15 +14,17 @@ def process_pdf(pdf_path: str):
     if pdf_type == "digital":
         pages = extract_text(pdf_path)
         tables = extract_tables(pdf_path)
+        method = "Digital Extraction (PyMuPDF)"
     else:
         pages = ocr_pdf(pdf_path)
         tables = []
+        method = "OCR (EasyOCR + Hybrid)"
 
     clean_pages_data = clean_pages(pages)
     semantic = semantic_map(tables)
     confidence = score_confidence(clean_pages_data, tables)
     metadata = generate_metadata(clean_pages_data)
-    lineage = track_lineage(pdf_path, confidence)
+    lineage = track_lineage(pdf_path, confidence, method)
 
     return {
         "pdf_type": pdf_type,

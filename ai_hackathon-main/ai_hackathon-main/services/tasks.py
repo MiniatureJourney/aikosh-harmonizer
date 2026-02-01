@@ -59,6 +59,13 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
         result_metadata["file_hash"] = file_hash
         result_metadata["original_filename"] = filename
         result_metadata["_worker_processed"] = True
+
+        # CRITICAL: explicit status update for frontend polling
+        if "error" in result_metadata or result_metadata.get("title") == "Processing Error":
+            result_metadata["status"] = "error"
+            result_metadata["error_message"] = result_metadata.get("error") or result_metadata.get("summary")
+        else:
+            result_metadata["status"] = "success"
         
         # 3. Save to DB
         db.save_metadata(file_hash, result_metadata)
