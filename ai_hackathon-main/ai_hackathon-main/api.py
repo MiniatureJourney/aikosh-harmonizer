@@ -1,29 +1,17 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Depends
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import os
 import tempfile
 import uuid
 from services.storage import get_storage_service
 from services.database import get_db_service
 from services.tasks import process_file_task
-from services.auth import (
-    AUTH_ENABLED,
-    create_access_token,
-    create_user,
-    authenticate_user,
-    get_current_user_optional,
-    UserCreate,
-    UserLogin,
-    UserOut,
-)
 from pdf_service.cache_manager import get_file_hash
 import uvicorn
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-from fastapi.routing import APIRouter
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -65,45 +53,6 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- Auth router ---
-auth_router = APIRouter(prefix="/auth", tags=["auth"])
-
-@auth_router.post("/register", response_model=dict)
-def register(data: UserCreate):
-    """Register a new user. Returns access token."""
-    user = create_user(email=data.email, password=data.password, name=data.name)
-    token = create_access_token(data={"sub": user["email"]})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": UserOut(email=user["email"], name=user.get("name")),
-    }
-
-@auth_router.post("/login", response_model=dict)
-def login(data: UserLogin):
-    """Login with email/password. Returns access token."""
-    user = authenticate_user(data.email, data.password)
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token(data={"sub": user["email"]})
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": UserOut(email=user["email"], name=user.get("name")),
-    }
-
-@auth_router.get("/me")
-def auth_me(current_user: Optional[dict] = Depends(get_current_user_optional)):
-    """Get current user when AUTH_ENABLED; else returns auth status."""
-    if not AUTH_ENABLED:
-        return {"auth_enabled": False, "user": None}
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    return {"auth_enabled": True, "user": UserOut(email=current_user["email"], name=current_user.get("name"))}
-
-app.include_router(auth_router)
-
-# --- Public routes (no auth) ---
 @app.get("/")
 @app.head("/")
 async def root():
@@ -116,28 +65,16 @@ def health_check():
         "message": "Service is healthy",
         "mode": "Async" if USE_CELERY else "Sync",
         "max_upload_mb": MAX_UPLOAD_MB,
-        "auth_enabled": AUTH_ENABLED,
     }
 
-# --- Protected routes (auth when AUTH_ENABLED; rate limited) ---
 @app.post("/harmonize")
-@limiter.limit("30/minute")  # commercial: prevent abuse
-async def harmonize_endpoint(
-    request,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-):
+@limiter.limit("30/minute")
+async def harmonize_endpoint(request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     return await handle_upload(file, "harmonize", background_tasks)
 
 @app.post("/process-pdf")
 @limiter.limit("30/minute")
-async def process_pdf_endpoint(
-    request,
-    background_tasks: BackgroundTasks,
-    file: UploadFile = File(...),
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-):
+async def process_pdf_endpoint(request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
     return await handle_upload(file, "pdf", background_tasks)
 
 async def handle_upload(file: UploadFile, task_type: str, background_tasks: BackgroundTasks):
@@ -199,10 +136,7 @@ async def handle_upload(file: UploadFile, task_type: str, background_tasks: Back
 
 
 @app.get("/status/{file_hash}")
-async def get_status(
-    file_hash: str,
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-):
+async def get_status(file_hash: str):
     data = db.get_metadata(file_hash)
     if not data:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -214,10 +148,7 @@ def _idmo_from_metadata(metadata: dict) -> dict:
 
 
 @app.get("/download-harmonized/{file_hash}")
-async def download_harmonized(
-    file_hash: str,
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-):
+async def download_harmonized(file_hash: str):
     metadata = db.get_metadata(file_hash)
     if not metadata or metadata.get("status") == "processing":
         raise HTTPException(status_code=404, detail="File not ready or not found")
@@ -279,10 +210,7 @@ async def download_harmonized(
                 pass
 
 @app.post("/synthesize")
-async def synthesize_endpoint(
-    metadata_list: List[Dict[Any, Any]],
-    current_user: Optional[dict] = Depends(get_current_user_optional),
-):
+async def synthesize_endpoint(metadata_list: List[Dict[Any, Any]]):
     from synthesizer import synthesize_metadata
     try:
         return synthesize_metadata(metadata_list)

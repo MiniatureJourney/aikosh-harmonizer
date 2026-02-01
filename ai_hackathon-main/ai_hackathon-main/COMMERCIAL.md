@@ -18,19 +18,9 @@ If you still see a specific error message in the UI or logs, that message now co
 
 ---
 
-## 2. Auth service
+## 2. Auth (removed for now)
 
-- **Endpoints**: `POST /auth/register`, `POST /auth/login`, `GET /auth/me`.
-- **Behavior**: When `AUTH_ENABLED=true`, upload, status, download, and synthesize require a valid JWT (Bearer token). When `AUTH_ENABLED=false`, all routes remain open (no auth).
-- **Storage**: Users are stored in memory by default. Optional file persistence: set `AUTH_USERS_FILE=data/users.json` (or any path) to save/load users across restarts.
-- **Frontend**: Login/Register modal, token in `localStorage`, `Authorization: Bearer <token>` on all relevant requests. On 401, token is cleared and the login modal is shown.
-
-**Env (optional):**
-
-- `AUTH_ENABLED=true` – require login for processing/download.
-- `JWT_SECRET` – use a long random secret in production (e.g. `openssl rand -hex 32`).
-- `JWT_EXPIRE_MINUTES=60` – token lifetime.
-- `AUTH_USERS_FILE=data/users.json` – persist users to a JSON file.
+Auth (JWT login/register) has been removed from this build. All upload, status, download, and synthesize routes are open. You can re-add auth later if needed.
 
 ---
 
@@ -38,37 +28,32 @@ If you still see a specific error message in the UI or logs, that message now co
 
 - **Rate limiting**: 30 requests per minute per IP for `POST /harmonize` and `POST /process-pdf` (SlowAPI). Reduces abuse and keeps the service stable.
 - **Request ID**: Every response includes `X-Request-ID` for tracing and support (same as request if client sends it, otherwise generated).
-- **Health**: `GET /health` returns `auth_enabled` and `max_upload_mb` so the UI can adapt.
+- **Health**: `GET /health` returns `max_upload_mb` so the UI can adapt.
 
 ---
 
 ## 4. Smoother experience
 
 - **Retry**: Failed files in the workspace show a **Retry** button; clicking it re-queues that file without re-uploading.
-- **Toasts**: Copy JSON and auth actions use toasts instead of `alert()`.
-- **401 handling**: If the server returns 401, the app clears the token, updates the auth UI, and opens the login modal with a “Please sign in” message.
+- **Toasts**: Copy JSON uses a toast instead of `alert()`.
 
 ---
 
 ## 5. Suggested next steps for production
 
-1. **Secrets**: Set `JWT_SECRET` and `GEMINI_API_KEY` in Render (or your host) env; never commit them.
-2. **Auth**: Set `AUTH_ENABLED=true` and optionally `AUTH_USERS_FILE` if you want persistent users without a DB.
-3. **DB/Redis**: For multi-instance or heavy load, set `DATABASE_URL` (Postgres) and `REDIS_URL` + `USE_CELERY=true` so processing is offloaded to workers.
-4. **Logging**: Add structured logging (e.g. `structlog` or JSON logs) and include `request_id` in every log line for debugging.
-5. **Monitoring**: Use `/health` and `X-Request-ID` in your APM or logs to trace failed PDF jobs and rate limits.
+1. **Secrets**: Set `GEMINI_API_KEY` in Render (or your host) env; never commit it.
+2. **DB/Redis**: For multi-instance or heavy load, set `DATABASE_URL` (Postgres) and `REDIS_URL` + `USE_CELERY=true` so processing is offloaded to workers.
+3. **Logging**: Add structured logging (e.g. `structlog` or JSON logs) and include `request_id` in every log line for debugging.
+4. **Monitoring**: Use `/health` and `X-Request-ID` in your APM or logs to trace failed PDF jobs and rate limits.
 
 ---
 
 ## Quick reference: env for commercial deploy (e.g. Render)
 
-| Variable           | Required | Description                          |
-|--------------------|----------|--------------------------------------|
-| `GEMINI_API_KEY`   | Yes      | Gemini API key                       |
-| `JWT_SECRET`       | If auth  | Long random secret                   |
-| `AUTH_ENABLED`     | No       | `true` to require login              |
-| `AUTH_USERS_FILE`  | No       | Path to JSON file to persist users   |
-| `MAX_UPLOAD_MB`    | No       | Default 25; lower if you see 413     |
-| `DATABASE_URL`     | No       | Postgres for metadata cache          |
-| `REDIS_URL`        | No       | For Celery async workers             |
-| `USE_CELERY`       | No       | `true` to use Celery                 |
+| Variable         | Required | Description                      |
+|------------------|----------|----------------------------------|
+| `GEMINI_API_KEY` | Yes      | Gemini API key                   |
+| `MAX_UPLOAD_MB`  | No       | Default 25; lower if you see 413 |
+| `DATABASE_URL`   | No       | Postgres for metadata cache      |
+| `REDIS_URL`      | No       | For Celery async workers         |
+| `USE_CELERY`     | No       | `true` to use Celery             |

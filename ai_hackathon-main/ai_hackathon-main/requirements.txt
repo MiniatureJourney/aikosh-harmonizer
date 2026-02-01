@@ -3,10 +3,6 @@ fastapi>=0.109,<1.0
 uvicorn>=0.27,<1.0
 python-multipart
 
-# Auth (JWT + password hashing)
-python-jose[cryptography]
-passlib[bcrypt]
-
 # Rate limiting (commercial)
 slowapi
 
