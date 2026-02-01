@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+pdfplumber
+pymupdf
+camelot-py[cv]
+pandas
+pillow
+pdf2image
+easyocr
+opencv-python
+python-multipart
+google-genai
+python-dotenv

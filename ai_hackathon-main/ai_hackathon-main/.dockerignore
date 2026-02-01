@@ -1,0 +1,18 @@
+# Version Control
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+venv/
+env/
+
+# Data
+uploads/*
+!uploads/.gitkeep
+outputs/*
+!outputs/.gitkeep
