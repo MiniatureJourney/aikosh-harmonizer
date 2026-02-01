@@ -107,6 +107,11 @@ def get_aikosh_metadata(raw_data):
     candidates = get_prioritized_models(client)
     last_err = None
     
+    # RUNTIME SAFETY CHECK
+    if not client:
+        print("CRITICAL ERROR: GEMINI_API_KEY is missing/invalid. Cannot contact AI.")
+        return {"error": "All models failed (Missing API Key)", "details": "Please set GEMINI_API_KEY in Render Environment Variables"}
+
     for model_id in candidates:
         try:
             # print(f"Harmonizing with {model_id}...")

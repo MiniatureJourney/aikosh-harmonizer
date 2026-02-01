@@ -164,6 +164,10 @@ def generate_metadata(pages_data):
     candidates = get_prioritized_models(client)
     last_error = None
     
+    if not client:
+        print("CRITICAL ERROR: GEMINI_API_KEY is missing. PDF Metadata generation aborted.")
+        return {"error": "Missing API Key", "summary": "API Key not found in environment"}
+
     print(f"Model candidates: {candidates}")
 
     # Try candidates in order
