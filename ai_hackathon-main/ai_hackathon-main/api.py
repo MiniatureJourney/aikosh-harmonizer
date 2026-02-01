@@ -68,13 +68,11 @@ def health_check():
     }
 
 @app.post("/harmonize")
-@limiter.limit("30/minute")
-async def harmonize_endpoint(request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def harmonize_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(..., description="CSV or Excel file")):
     return await handle_upload(file, "harmonize", background_tasks)
 
 @app.post("/process-pdf")
-@limiter.limit("30/minute")
-async def process_pdf_endpoint(request, background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def process_pdf_endpoint(background_tasks: BackgroundTasks, file: UploadFile = File(..., description="PDF file")):
     return await handle_upload(file, "pdf", background_tasks)
 
 async def handle_upload(file: UploadFile, task_type: str, background_tasks: BackgroundTasks):
