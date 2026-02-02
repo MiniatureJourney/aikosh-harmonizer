@@ -36,27 +36,41 @@ def process_pdf(pdf_path: str):
     method = "Digital Extraction (PyMuPDF)"
     if pdf_type == "digital":
         try:
-            pages = extract_text(pdf_path)  # uses pdfplumber + PyMuPDF fallback
+            pages = extract_text(file_path)  # uses pdfplumber + PyMuPDF fallback
+            print(f"[Orchestrator] Digital text extraction completed. Pages found: {len(pages)}")
         except Exception as e:
             errors.append(f"Text extraction: {e}")
-        try:
-            tables = extract_tables(pdf_path)
-        except Exception as e:
-            errors.append(f"Table extraction: {e}")
+            print(f"[Orchestrator] Digital text extraction failed: {e}")
+        
         # If still no text (e.g. image-only PDF misdetected as digital), try OCR as last resort
         if not pages or not any(p.get("text", "").strip() for p in pages):
+            print("[Orchestrator] Digital extraction empty or no text, attempting OCR fallback.")
             try:
-                pages = ocr_pdf(pdf_path)
+                pages = ocr_pdf(file_path)
                 if pages:
                     method = "OCR (fallback)"
+                    print(f"[Orchestrator] OCR fallback completed. Pages found: {len(pages)}")
             except Exception as e:
                 errors.append(f"OCR fallback: {e}")
-    else:
+                print(f"[Orchestrator] OCR fallback failed: {e}")
+    else: # pdf_type is not digital (e.g., scanned)
+        print("[Orchestrator] Scanned PDF detected, starting OCR...")
         method = "OCR (EasyOCR + Hybrid)"
         try:
-            pages = ocr_pdf(pdf_path)
+            pages = ocr_pdf(file_path)
+            print(f"[Orchestrator] OCR completed. Pages found: {len(pages)}")
         except Exception as e:
             errors.append(f"OCR: {e}")
+
+    print(f"[Orchestrator] Step 3: Extracting Tables (Camelot)")
+    tables = []
+    try:
+        tables = extract_tables(file_path)
+        print(f"[Orchestrator] Table extraction completed. Tables found: {len(tables)}")
+    except Exception as e:
+         print(f"[Orchestrator] Table extraction failed: {e}")
+         errors.append(f"Table extraction: {e}")
+
 
     if not pages:
         errors.append("No text could be extracted from the PDF (empty or unsupported).")

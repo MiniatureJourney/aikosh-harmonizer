@@ -345,10 +345,16 @@
 
         function setProcessingUI(on) {
             isProcessing = on;
+            // Removed global blocking overlay.
+            // We now rely on the individual file item status in the list to show progress.
+            // The overlay logic is preserved but disconnected from the queue loop.
             const drop = document.getElementById('dropZone');
-            const overlay = document.getElementById('processingOverlay');
-            if (drop) drop.classList.toggle('drop-zone-disabled', on);
-            if (overlay) overlay.classList.toggle('hidden', !on);
+            if (drop) drop.classList.toggle('drop-zone-disabled', false); // Never disable dropzone completely
+
+            // Only show overlay if explicitly needed (e.g. initial load), but for queue we skip it.
+            // const overlay = document.getElementById('processingOverlay');
+            // if (overlay) overlay.classList.add('hidden'); 
+
             renderList();
         }
 

@@ -11,8 +11,11 @@ def _clean_cell(cell):
 def extract_tables(pdf_path: str) -> list:
     """Extract tables from PDF. Returns [] on any failure (Camelot can fail on many PDFs)."""
     try:
+        print(f"[TableExtractor] Starting Camelot read_pdf for {pdf_path}...")
         tables = camelot.read_pdf(pdf_path, pages="all")
-    except Exception:
+        print(f"[TableExtractor] Camelot finished. Found {len(tables)} tables.")
+    except Exception as e:
+        print(f"[TableExtractor] Camelot failed: {e}")
         return []
 
     extracted = []
