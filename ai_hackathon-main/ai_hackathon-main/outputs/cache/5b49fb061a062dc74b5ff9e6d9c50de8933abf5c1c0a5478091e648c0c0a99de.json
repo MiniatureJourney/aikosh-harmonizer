@@ -1,5 +1,13 @@
 {
-    "status": "processing",
+    "catalog_info": {
+        "title": "Mock Title",
+        "sector": "Test"
+    },
+    "technical_metadata": {
+        "ai_readiness_level": 0.9
+    },
+    "status": "success",
     "file_hash": "5b49fb061a062dc74b5ff9e6d9c50de8933abf5c1c0a5478091e648c0c0a99de",
-    "original_filename": "test_data.csv"
+    "original_filename": "5b49fb061a062dc74b5ff9e6d9c50de8933abf5c1c0a5478091e648c0c0a99de.csv",
+    "_worker_processed": true
 }

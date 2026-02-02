@@ -74,8 +74,8 @@ def ocr_pdf(pdf_path: str):
         return []
     finally:
         # Cleanup reader if not needed anymore to free RAM
-        if LOW_MEMORY_MODE and '_reader' in globals() and _reader is not None:
-             global _reader
+        global _reader
+        if LOW_MEMORY_MODE and _reader is not None:
              _reader = None
              gc.collect()
 

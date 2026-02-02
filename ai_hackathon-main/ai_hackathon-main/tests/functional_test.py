@@ -13,7 +13,25 @@ sys.modules["botocore.exceptions"] = MagicMock()
 sys.modules["google"] = MagicMock()
 sys.modules["google.genai"] = MagicMock()
 sys.modules["openpyxl"] = MagicMock()
-sys.modules["celery"] = MagicMock()
+# sys.modules["celery"] = MagicMock() # Replacing simple mock
+
+# Sophisticated Celery Mock to preserve function execution
+mock_celery = MagicMock()
+def task_decorator(*args, **kwargs):
+    def wrapper(func):
+        # Celery bind=True means first arg is self.
+        # When calling directly (Sync mode), we need to inject it.
+        def inner(*f_args, **f_kwargs):
+            # Inject dummy self
+            return func(MagicMock(), *f_args, **f_kwargs)
+        return inner
+    return wrapper
+mock_app = MagicMock()
+mock_app.task.side_effect = task_decorator
+mock_app.conf.update = MagicMock()
+mock_celery.Celery.return_value = mock_app
+sys.modules["celery"] = mock_celery
+
 sys.modules["redis"] = MagicMock()
 sys.modules["sqlalchemy"] = MagicMock()
 sys.modules["sqlalchemy.orm"] = MagicMock()

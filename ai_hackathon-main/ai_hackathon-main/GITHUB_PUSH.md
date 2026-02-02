@@ -52,5 +52,7 @@ If you want to restart the deployment without making code changes:
 ## Quick Reference (One-liner)
 If you just want to push everything quickly:
 ```powershell
-git add . ; git commit -m "Update" ; git push origin main
+git add . 
+git commit -m "Update" 
+git push origin main
 ```

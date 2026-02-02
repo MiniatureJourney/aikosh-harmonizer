@@ -44,15 +44,37 @@
         }
 
         /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
 
         /* Smooth transitions */
-        #detailsView, #emptyState { transition: opacity 0.2s ease; }
-        .file-item { transition: background-color 0.15s ease, border-color 0.15s ease; }
-        .drop-zone-disabled { pointer-events: none; opacity: 0.7; }
+        #detailsView,
+        #emptyState {
+            transition: opacity 0.2s ease;
+        }
+
+        .file-item {
+            transition: background-color 0.15s ease, border-color 0.15s ease;
+        }
+
+        .drop-zone-disabled {
+            pointer-events: none;
+            opacity: 0.7;
+        }
     </style>
 </head>
 
@@ -136,7 +158,8 @@
 
             <!-- Empty State -->
             <div id="emptyState" class="absolute inset-0 flex flex-col items-center justify-center p-8 text-center">
-                <div id="dropZoneBox" class="max-w-md w-full border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-2xl p-12 transition-all hover:border-orange-500/50 hover:bg-slate-900 group cursor-pointer"
+                <div id="dropZoneBox"
+                    class="max-w-md w-full border-2 border-dashed border-slate-700 bg-slate-900/50 rounded-2xl p-12 transition-all hover:border-orange-500/50 hover:bg-slate-900 group cursor-pointer"
                     onclick="if(!isProcessing) document.getElementById('fileInput').click()">
                     <div
                         class="mx-auto w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
@@ -144,7 +167,8 @@
                             class="w-10 h-10 text-slate-400 group-hover:text-orange-500 transition-colors"></i>
                     </div>
                     <h3 class="text-xl font-semibold text-white mb-2">Upload files</h3>
-                    <p class="text-slate-400 mb-6">Drop PDF, CSV, or Excel here — we’ll extract metadata and standardize it.
+                    <p class="text-slate-400 mb-6">Drop PDF, CSV, or Excel here — we’ll extract metadata and standardize
+                        it.
                     </p>
                     <span id="maxSizeHint"
                         class="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-800 px-3 py-1 rounded-full border border-slate-700">
@@ -154,7 +178,8 @@
             </div>
 
             <!-- Processing overlay message (shown while polling) -->
-            <div id="processingOverlay" class="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-10">
+            <div id="processingOverlay"
+                class="hidden absolute inset-0 flex flex-col items-center justify-center bg-slate-950/80 z-10">
                 <div class="flex flex-col items-center gap-4">
                     <i data-lucide="loader-2" class="w-12 h-12 text-orange-500 animate-spin"></i>
                     <p id="processingText" class="text-slate-300 font-medium">Processing...</p>
@@ -283,7 +308,7 @@
         // --- INIT: fetch max upload from server
         fetch('/health').then(r => r.json()).then(d => {
             if (d.max_upload_mb) { maxUploadMb = d.max_upload_mb; const el = document.getElementById('maxSizeValue'); if (el) el.textContent = maxUploadMb + 'MB'; }
-        }).catch(() => {});
+        }).catch(() => { });
 
         // --- LISTENERS ---
         fileInput.addEventListener('change', e => addFiles(e.target.files));
