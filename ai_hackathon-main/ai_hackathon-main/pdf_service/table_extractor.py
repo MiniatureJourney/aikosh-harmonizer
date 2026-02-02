@@ -8,7 +8,8 @@ def _clean_cell(cell):
     s = str(cell).strip()
     return s
 
-def extract_tables(pdf_path: str):
+def extract_tables(pdf_path: str) -> list:
+    """Extract tables from PDF. Returns [] on any failure (Camelot can fail on many PDFs)."""
     try:
         tables = camelot.read_pdf(pdf_path, pages="all")
     except Exception:
@@ -16,17 +17,17 @@ def extract_tables(pdf_path: str):
 
     extracted = []
     for i, table in enumerate(tables):
-        data_grid = table.df.values.tolist()
-        # Clean malformed cells: strip, normalize NaN/None
-        cleaned_grid = [[_clean_cell(c) for c in row] for row in data_grid]
-
-        extracted.append({
-            "table_id": i,
-            "page": table.page,
-            "accuracy": table.accuracy,
-            "whitespace": table.whitespace,
-            "order": table.order,
-            "data": cleaned_grid,
-        })
-
+        try:
+            data_grid = table.df.values.tolist()
+            cleaned_grid = [[_clean_cell(c) for c in row] for row in data_grid]
+            extracted.append({
+                "table_id": i,
+                "page": getattr(table, "page", i + 1),
+                "accuracy": getattr(table, "accuracy", 0),
+                "whitespace": getattr(table, "whitespace", 0),
+                "order": getattr(table, "order", 0),
+                "data": cleaned_grid,
+            })
+        except Exception:
+            continue
     return extracted

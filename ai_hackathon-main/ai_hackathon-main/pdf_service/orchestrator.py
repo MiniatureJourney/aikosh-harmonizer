@@ -36,13 +36,21 @@ def process_pdf(pdf_path: str):
     method = "Digital Extraction (PyMuPDF)"
     if pdf_type == "digital":
         try:
-            pages = extract_text(pdf_path)
+            pages = extract_text(pdf_path)  # uses pdfplumber + PyMuPDF fallback
         except Exception as e:
             errors.append(f"Text extraction: {e}")
         try:
             tables = extract_tables(pdf_path)
         except Exception as e:
             errors.append(f"Table extraction: {e}")
+        # If still no text (e.g. image-only PDF misdetected as digital), try OCR as last resort
+        if not pages or not any(p.get("text", "").strip() for p in pages):
+            try:
+                pages = ocr_pdf(pdf_path)
+                if pages:
+                    method = "OCR (fallback)"
+            except Exception as e:
+                errors.append(f"OCR fallback: {e}")
     else:
         method = "OCR (EasyOCR + Hybrid)"
         try:

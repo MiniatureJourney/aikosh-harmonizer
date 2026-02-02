@@ -16,6 +16,11 @@ class StorageService(ABC):
         pass
 
     @abstractmethod
+    def get_stream(self, filename: str):
+        """Retrieves content as a file-like stream (read-only)."""
+        pass
+
+    @abstractmethod
     def delete(self, filename: str):
         """Deletes the file."""
         pass
@@ -42,6 +47,12 @@ class LocalStorage(StorageService):
             raise FileNotFoundError(f"File {filename} not found")
         with open(path, "rb") as f:
             return f.read()
+
+    def get_stream(self, filename: str):
+        path = os.path.join(self.base_dir, filename)
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File {filename} not found")
+        return open(path, "rb")
 
     def delete(self, filename: str):
         path = os.path.join(self.base_dir, filename)
@@ -75,6 +86,13 @@ class S3Storage(StorageService):
         try:
             response = self.s3.get_object(Bucket=self.bucket, Key=filename)
             return response['Body'].read()
+        except Exception as e:
+            raise FileNotFoundError(f"S3 File {filename} not found: {e}")
+
+    def get_stream(self, filename: str):
+        try:
+            response = self.s3.get_object(Bucket=self.bucket, Key=filename)
+            return response['Body']
         except Exception as e:
             raise FileNotFoundError(f"S3 File {filename} not found: {e}")
 

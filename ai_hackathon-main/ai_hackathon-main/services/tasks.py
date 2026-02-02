@@ -1,5 +1,7 @@
 import os
 import tempfile
+import gc
+import shutil
 from typing import Dict, Any
 from celery_app import celery_app
 from services.storage import get_storage_service
@@ -37,12 +39,14 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
     try:
         print(f"[Worker] Processing {filename} ({task_type})")
         
-        # 1. Download from Storage
-        content = storage.get(filename) # In local, filename is path relative to uploads, or UUID
-        
-        # We need to save it temporarily for the libraries to read
-        with open(temp_path, "wb") as f:
-            f.write(content)
+        # 1. Download from Storage (Streaming)
+        stream = storage.get_stream(filename)
+        try:
+            with open(temp_path, "wb") as f:
+                shutil.copyfileobj(stream, f)
+        finally:
+            if hasattr(stream, 'close'):
+                stream.close()
             
         result_metadata = {}
 
@@ -120,3 +124,5 @@ def process_file_task(self, file_hash: str, filename: str, task_type: str = "har
         # Cleanup temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
+        # Explicit GC
+        gc.collect()
