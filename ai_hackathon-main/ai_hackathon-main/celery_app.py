@@ -21,9 +21,11 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     # Stability settings
-    worker_concurrency=int(os.getenv("WORKER_CONCURRENCY", 2)),
+    worker_concurrency=int(os.getenv("WORKER_CONCURRENCY", 1)), # Default to 1 for low memory envs
     task_time_limit=300, # 5 minutes hard limit
-    task_soft_time_limit=240, 
+    task_soft_time_limit=240,
+    worker_max_tasks_per_child=5, # Recycle worker after 5 tasks to free memory leaks
+    worker_prefetch_multiplier=1, # Don't hoard tasks
 )
 
 # Import tasks so they are registered
