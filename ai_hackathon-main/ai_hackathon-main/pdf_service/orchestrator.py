@@ -33,10 +33,13 @@ def process_pdf(pdf_path: str):
     # 2. Extract text and tables
     pages = []
     tables = []
+    # 2. Extract Text/Tables (Based on type)
+    pages = []
+    tables = []
     method = "Digital Extraction (PyMuPDF)"
     if pdf_type == "digital":
         try:
-            pages = extract_text(file_path)  # uses pdfplumber + PyMuPDF fallback
+            pages = extract_text(pdf_path)  # uses pdfplumber + PyMuPDF fallback
             print(f"[Orchestrator] Digital text extraction completed. Pages found: {len(pages)}")
         except Exception as e:
             errors.append(f"Text extraction: {e}")
@@ -46,7 +49,7 @@ def process_pdf(pdf_path: str):
         if not pages or not any(p.get("text", "").strip() for p in pages):
             print("[Orchestrator] Digital extraction empty or no text, attempting OCR fallback.")
             try:
-                pages = ocr_pdf(file_path)
+                pages = ocr_pdf(pdf_path)
                 if pages:
                     method = "OCR (fallback)"
                     print(f"[Orchestrator] OCR fallback completed. Pages found: {len(pages)}")
@@ -57,7 +60,7 @@ def process_pdf(pdf_path: str):
         print("[Orchestrator] Scanned PDF detected, starting OCR...")
         method = "OCR (EasyOCR + Hybrid)"
         try:
-            pages = ocr_pdf(file_path)
+            pages = ocr_pdf(pdf_path)
             print(f"[Orchestrator] OCR completed. Pages found: {len(pages)}")
         except Exception as e:
             errors.append(f"OCR: {e}")
@@ -65,7 +68,7 @@ def process_pdf(pdf_path: str):
     print(f"[Orchestrator] Step 3: Extracting Tables (Camelot)")
     tables = []
     try:
-        tables = extract_tables(file_path)
+        tables = extract_tables(pdf_path)
         print(f"[Orchestrator] Table extraction completed. Tables found: {len(tables)}")
     except Exception as e:
          print(f"[Orchestrator] Table extraction failed: {e}")
